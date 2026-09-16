@@ -329,7 +329,8 @@ version. `src/lib/endpoints.ts` holds that rule and the reason.
 
 The seven `F1`–`F5` documents at the repository root are the working record behind the code
 above — the requirements each panel must satisfy, the invariants, the evidence map, the
-failure-scenario matrix and its results:
+failure-scenario matrix and its results. Two more live under `docs/`, and they are a different
+kind of document: a work order and a runbook, both of which say plainly what has not happened yet.
 
 | Document | Phase |
 |---|---|
@@ -337,6 +338,8 @@ failure-scenario matrix and its results:
 | `STATE-OWNERSHIP.md`, `INVARIANTS.md`, `EVIDENCE-MAP.md`, `TEST-DOUBLES.md` | F2 — correctness designed up front, plus the F3 single-source-of-truth check |
 | `BROWSER-TEST-PLAN.md` | F4 — four test layers, and the failure scenarios that were really run |
 | `SUPPORT-AND-SIGNOFF.md` | F5 — browser matrix, build reproducibility, accessibility, sign-off |
+| `docs/DEPLOY-RUNBOOK.md` | D (integration) — putting the whole stack on public infrastructure: contract to Base Sepolia, record, index, front end to Vercel, and the evidence that would make the claim |
+| `docs/full-stack-frontend-brief.md` | B — the work order the four routes were built from, with a status block saying what was and was not carried out |
 
 **On their provenance, stated plainly.** They follow a repeatable delivery process with
 numbered phases, gates and required artefacts: a software-delivery blueprint, a frontend
