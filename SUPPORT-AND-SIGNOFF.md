@@ -48,18 +48,30 @@ This project uses **input hashes**:
 | Input | Value (measured 2026-09-16) | How it is obtained |
 |---|---|---|
 | sha256 of `package-lock.json` | `08aedc3ad4dc7c736f503090fcb5a23ad86cb22a5e275ef6a2d19a1b678a2676` | `node tools/build-inputs.mjs` |
-| the whole `src/` tree (paths sorted + per-file sha256 folded) | `c75133365f7d4466cd062d2e6d31fa39943433eb3652341620da194772453951` (11 files) | same as above |
-| the whole `test/` + `tools/` tree | `41eb52c5e44b2cf9a506b6a96fed20048cf65688f4676ff1edf7db623d8263c1` (17 files) | same as above |
+| the whole `src/` tree (paths sorted + per-file sha256 folded) | `cbb143131a7d431354492582355c110b52917727516af72f4385ce72bb572449` (11 files) | same as above |
+| the whole `test/` + `tools/` tree | `13908126a5b96aca157c7ccecb73cab2bd54bb140d00db974a005d3ffdb88dbd` (17 files) | same as above |
 | the four config files (`next.config.ts` / `tsconfig.json` / `tailwind.config.ts` / `postcss.config.mjs`) | `93d0e7c61a3fed6e0b96c2cbc923060481069bcbafacec9ab143273848dfefb6` | same as above |
 | Node version | `v24.9.0` | `node --version` |
 | npm package-manager version | `11.13.0` (invoked through `node <npm-cli.js>`) | see the workspace's environment capability list |
+
+> **These values go stale the moment the code changes, and they already have once.** The `src/`
+> and `test/tools` hashes recorded here originally were `c7513336…` and `41eb52c5…`; they were
+> taken before `src/lib/chain.ts` grew its error classification and before
+> `test/chain-errors.test.ts` and `tools/scenario-report.mjs` were added. Nobody noticed until a
+> later change made the file think about its own numbers again.
+>
+> **That is worth stating in the document rather than quietly fixing**, because it is the exact
+> failure this document exists to catch: a recorded value that no longer matches reality, in a
+> section about verifying things. It is also the argument for reading this row as a
+> **method**, not as a fact — the durable claim is "run the tool twice and the output matches",
+> and the hashes below are one dated instance of it. Re-run to check, do not quote to trust.
 
 **Were the two runs actually done**: **yes, and the results are identical.** Run twice 2 seconds apart, the four hashes are **identical character for character**:
 
 ```
 lockfile    08aedc3ad4dc7c736f503090fcb5a23ad86cb22a5e275ef6a2d19a1b678a2676
-src         c75133365f7d4466cd062d2e6d31fa39943433eb3652341620da194772453951   (11 files)
-checks      41eb52c5e44b2cf9a506b6a96fed20048cf65688f4676ff1edf7db623d8263c1   (17 files: test/ + tools/)
+src         cbb143131a7d431354492582355c110b52917727516af72f4385ce72bb572449   (11 files)
+checks      13908126a5b96aca157c7ccecb73cab2bd54bb140d00db974a005d3ffdb88dbd   (17 files: test/ + tools/)
 config      93d0e7c61a3fed6e0b96c2cbc923060481069bcbafacec9ab143273848dfefb6   (4 files)
 ```
 
