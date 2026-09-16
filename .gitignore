@@ -16,3 +16,11 @@ out/
 .env
 .env.local
 .env.*.local
+
+# Pages saved by `tools/capture-scenarios.mjs` while it produces the reports in
+# docs/evidence/. They are the INPUT to a report, and they are kept only when a run fails so
+# that the failure can be inspected -- the committed evidence is the report. Ignored rather
+# than committed because a saved page is a build artifact: it embeds the build id and the
+# upstream values of the moment it was taken, and a stale one in the repository would be read
+# as documentation of current behaviour.
+.captures/

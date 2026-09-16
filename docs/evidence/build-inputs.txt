@@ -1,19 +1,29 @@
-﻿=== run 1 ===
+=== pass 1 (every file read from disk) ===
+generated   2026-09-16T14:52:53.970Z
 node        v24.9.0
 npm         11.13.0
-lockfile    08aedc3ad4dc7c736f503090fcb5a23ad86cb22a5e275ef6a2d19a1b678a2676
-src         cbb143131a7d431354492582355c110b52917727516af72f4385ce72bb572449   (11 files)
-checks      13908126a5b96aca157c7ccecb73cab2bd54bb140d00db974a005d3ffdb88dbd   (17 files: test/ + tools/)
-config      93d0e7c61a3fed6e0b96c2cbc923060481069bcbafacec9ab143273848dfefb6   (4 files)
+lockfile    b3ad3a0497ef22f6db442469617bae930381db09c6085198cb09123a772a66a5
+src         d78239ece2bd6ecd25d90a63c8476f47558b6c702578e1a40f34334a04a0ea06   (24 files)
+checks      25cbe0570f1372db5ecff07368ad70d09dd7e612da8f3bee19f2fd9338631475   (22 files: test/ + tools/)
+config      88aef5c65ed5bffb37621092ac0844660f37b2b36d6a3880fa740649baaaa41f   (4 files)
 
-Run twice and compare: identical output means identical inputs.
-=== run 2 (reproducibility: the four hashes must be identical to run 1) ===
+=== pass 2 (the same set, read from disk again) ===
+generated   2026-09-16T14:52:53.977Z
 node        v24.9.0
 npm         11.13.0
-lockfile    08aedc3ad4dc7c736f503090fcb5a23ad86cb22a5e275ef6a2d19a1b678a2676
-src         cbb143131a7d431354492582355c110b52917727516af72f4385ce72bb572449   (11 files)
-checks      13908126a5b96aca157c7ccecb73cab2bd54bb140d00db974a005d3ffdb88dbd   (17 files: test/ + tools/)
-config      93d0e7c61a3fed6e0b96c2cbc923060481069bcbafacec9ab143273848dfefb6   (4 files)
+lockfile    b3ad3a0497ef22f6db442469617bae930381db09c6085198cb09123a772a66a5
+src         d78239ece2bd6ecd25d90a63c8476f47558b6c702578e1a40f34334a04a0ea06   (24 files)
+checks      25cbe0570f1372db5ecff07368ad70d09dd7e612da8f3bee19f2fd9338631475   (22 files: test/ + tools/)
+config      88aef5c65ed5bffb37621092ac0844660f37b2b36d6a3880fa740649baaaa41f   (4 files)
 
-Run twice and compare: identical output means identical inputs.
-=== commands and their output, for the record ===
+VERDICT: the two passes AGREE on every input
+
+The generated time is deliberately not compared. The other five values are the node and
+npm versions, the lockfile hash, and the tree hashes of src/, test/ + tools/, and the four
+config files -- so if one changes, it names which input moved.
+
+WHAT THIS IS, EXACTLY: the same input set hashed twice from disk. It proves the hashes are
+deterministic and that nothing changed between the two reads. It is NOT the same claim as
+"two separate invocations of this command agree", which is what the manual procedure did;
+two invocations would also cover a report that depended on process state, and this report
+does not -- it reads files and prints them.

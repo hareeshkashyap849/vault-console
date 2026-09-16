@@ -101,6 +101,25 @@ export interface PriceResponse {
   note: string;
 }
 
+/**
+ * What `GET /api/events` returns.
+ *
+ * READ OFF THE RUNNING SERVICE, like `SummaryResponse` above and for the same reason: this
+ * interface was first written from the route table's one-line description, which does not
+ * mention the `filter` envelope. Nothing called it, so nothing noticed -- `tsc` accepted the
+ * wrong shape and the page would have silently mis-typed its own data. `test/contract.test.ts`
+ * now pins the envelope field by field against the live service.
+ */
+export interface EventResponse {
+  /** Newest first, per the service. The page re-sorts rather than trusting this. */
+  events: VaultEvent[];
+  count: number;
+  limit: number;
+  maxLimit: number;
+  /** The filter the service actually applied. `null` means "not filtered", not "no match". */
+  filter: { kind: string | null; account: string | null };
+}
+
 export interface CandleResponse {
   candles: Candle[];
   decimals: { asset: number; share: number };

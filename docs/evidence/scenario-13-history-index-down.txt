@@ -1,0 +1,48 @@
+file: .captures/scenario-13-history-index-down.html
+{
+  "fileBytes": 18033,
+  "panelHeadings": [
+    "Index",
+    "Recent events"
+  ],
+  "svg": {
+    "elements": 0,
+    "candleBodies": 0,
+    "groups": 0,
+    "lines": 0,
+    "tooltips": 0,
+    "emptyState": 0
+  },
+  "chainFailurePanel": false,
+  "indexFailurePanel": true,
+  "indexFailureUrl": "http://127.0.0.1:8788/api/status",
+  "detailLine": null,
+  "noComparisonClaim": false,
+  "comparisonPresent": false,
+  "flatSeriesCaption": false,
+  "coverageGapNote": false,
+  "indexedToBlock": null,
+  "lagBlocks": null,
+  "indexerLastRan": null,
+  "healthHeading": false,
+  "totalAssetsShown": null,
+  "totalSharesShown": null,
+  "priceShown": null,
+  "rawUint256OnPage": false,
+  "historyHeading": true,
+  "historyFailurePanel": true,
+  "historyNoFallbackClaim": true,
+  "historySaysOneSource": true,
+  "tables": 0,
+  "lagShown": null,
+  "eventsClaim": null
+}
+
+SCENARIO 13 (history page, index API unreachable): PASS
+  ok   the page still answers: it is the history page, not a 500
+  ok   it says the index service could not be read
+  ok   the message names the URL it failed on (http://127.0.0.1:8788/api/status)
+  ok   it says it has no second source to fall back on
+  ok   it rendered NO figures from a source it does not have (0 tables)
+  ok   it does not report a chain failure: it never read the chain
+  ok   no raw uint256 on the page

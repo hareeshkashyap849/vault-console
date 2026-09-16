@@ -1,0 +1,50 @@
+file: .captures/scenario-12-history-up.html
+{
+  "fileBytes": 77794,
+  "panelHeadings": [
+    "How current this is",
+    "Event tally",
+    "Recent events",
+    "Price series as a table"
+  ],
+  "svg": {
+    "elements": 0,
+    "candleBodies": 0,
+    "groups": 0,
+    "lines": 0,
+    "tooltips": 0,
+    "emptyState": 0
+  },
+  "chainFailurePanel": false,
+  "indexFailurePanel": false,
+  "indexFailureUrl": null,
+  "detailLine": null,
+  "noComparisonClaim": false,
+  "comparisonPresent": false,
+  "flatSeriesCaption": false,
+  "coverageGapNote": false,
+  "indexedToBlock": "12666",
+  "lagBlocks": "2786",
+  "indexerLastRan": "0s",
+  "healthHeading": false,
+  "totalAssetsShown": null,
+  "totalSharesShown": null,
+  "priceShown": "12666",
+  "rawUint256OnPage": false,
+  "historyHeading": true,
+  "historyFailurePanel": false,
+  "historyNoFallbackClaim": false,
+  "historySaysOneSource": true,
+  "tables": 3,
+  "lagShown": "2786",
+  "eventsClaim": "All 18 events the index holds"
+}
+
+SCENARIO 12 (history page, index up): PASS
+  ok   the history page rendered
+  ok   all three tables rendered (3)
+  ok   the index's lag is shown up front (2786)
+  ok   the events table says what it is showing (All 18 events the index holds)
+  ok   the page states it reads one source and which one
+  ok   no failure panel
+  ok   no raw uint256 on the page

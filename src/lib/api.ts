@@ -1,5 +1,5 @@
 import { apiUrl } from './endpoints.ts';
-import type { CandleResponse, PriceResponse, Status, SummaryResponse } from './types.ts';
+import type { CandleResponse, EventResponse, PriceResponse, Status, SummaryResponse } from './types.ts';
 
 /**
  * The index service, as a typed client.
@@ -132,10 +132,7 @@ export const indexApi = {
     const q = new URLSearchParams();
     q.set('limit', String(opts.limit ?? 50));
     if (opts.kind) q.set('kind', opts.kind);
-    return getJson<{ events: unknown[]; count: number; limit: number; maxLimit: number }>(
-      `/api/events?${q.toString()}`,
-      LIVE,
-    );
+    return getJson<EventResponse>(`/api/events?${q.toString()}`, LIVE);
   },
   summary: () => getJson<SummaryResponse>('/api/summary', LIVE),
 };

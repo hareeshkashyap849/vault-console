@@ -23,6 +23,18 @@ import { rpcUrl } from './endpoints.ts';
  * relied on the rewrite in `next.config.ts`; on the server that throws
  * `TypeError: Failed to parse URL`, and the resulting 500 named `/rpc` as though the
  * endpoint were unhealthy. `endpoints.ts` holds the rule and the reason.
+ *
+ * WHY THE WRITE PATHS AND THE ALLOWANCE READS LIVE IN THIS FILE TOO
+ *
+ * `/vault/manage` needs `previewDeposit`, `previewRedeem`, `deposit`, `redeem` and the ERC-20
+ * `allowance`. Declaring a second ABI beside the component would put the interface contract in
+ * two places, and the two copies would agree until one of them was edited. Nothing here reads
+ * env at module scope or touches Node built-ins, so a client component may import it.
+ *
+ * The signatures are FUNCTION SIGNATURES, not compiler output, and that is the deliberate
+ * choice this repository already records: a signature is an interface contract that can be
+ * checked against the text of ERC-4626, whereas an address is a deployment instance that must
+ * be read.
  */
 export const VAULT_ABI = parseAbi([
   'function totalAssets() view returns (uint256)',
@@ -30,15 +42,27 @@ export const VAULT_ABI = parseAbi([
   'function balanceOf(address) view returns (uint256)',
   'function maxWithdraw(address) view returns (uint256)',
   'function convertToAssets(uint256) view returns (uint256)',
+  'function previewDeposit(uint256 assets) view returns (uint256 shares)',
+  'function previewRedeem(uint256 shares) view returns (uint256 assets)',
   'function asset() view returns (address)',
   'function decimals() view returns (uint8)',
   'function symbol() view returns (string)',
+  // The two write paths this app implements, with the signatures the vault's own front end
+  // was read for. `deposit` takes ASSETS and `redeem` takes SHARES -- reading the two the
+  // other way round is the mistake the field labels on `/vault/manage` exist to prevent.
+  'function deposit(uint256 assets, address receiver) returns (uint256 shares)',
+  'function redeem(uint256 shares, address receiver, address owner) returns (uint256 assets)',
 ]);
 
 export const ERC20_ABI = parseAbi([
   'function decimals() view returns (uint8)',
   'function symbol() view returns (string)',
   'function balanceOf(address) view returns (uint256)',
+  // Allowance is a READ, and that is the point: it is read from the chain every time a deposit
+  // decision is made, never remembered. `approve` is here so the amount granted is exactly the
+  // amount in front of the user.
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
 ]);
 
 export interface ChainConfig {

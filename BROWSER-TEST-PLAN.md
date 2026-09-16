@@ -57,11 +57,11 @@ headless environment "too clean to be real".
 
 | Item | Value |
 |---|---|
-| This project's browser test script | `tools/browser-assert.mjs`. **One command**: `node tools/browser-assert.mjs --url http://127.0.0.1:3103` (default `http://127.0.0.1:3100`) |
+| This project's browser test script | `tools/browser-assert.mjs`. **One command**: `node tools/browser-assert.mjs --url http://127.0.0.1:3121` (the production build; a dev server works too) |
 | Who runs it (from outside the restricted shell) | anyone — the script needs only the daemon and a browser, no privilege escalation. **The the author can run it from inside the restricted shell too**, because the daemon starts the browser outside the sandbox |
 | Wired into the CI aggregate | **No**, and **deliberately not**. It needs three processes (anvil / the index API / Next dev) plus a real browser. Wiring it in would make the aggregate job's result depend on "did the environment come up", not on the code |
 | Browser driven | the user's real Chrome, Profile 3 (with MetaMask 13.48) |
-| Date and operator of the most recent real run | **2026-09-16, the author**, result 14/14 passed (`docs/evidence/browser-assert.txt`) |
+| Date and operator of the most recent real run | **2026-09-16, the author**, result **51/51 passed, 0 failed** (`docs/evidence/browser-assert.txt`) |
 | Did that run require privilege escalation | **No escalation** (the daemon runs the browser outside the sandbox). Running `next dev` and `next build` in the same period **needed one escalation** — not because of the browser, but because Next 16's Turbopack has to spawn worker processes (`spawn EPERM`). That is recorded in the workspace's environment capability list |
 
 ---
@@ -171,21 +171,38 @@ So this project's L4 targets are replaced by three **equivalent, machine-decidab
 
 **Evidence requirements**: the screenshot path is the **relative path the file actually landed at** (for a row that has not been run, write `not run`);
 the console column means "the console errors and uncaught exceptions this page produced during this case, which must be empty or explainable".
-**Transaction-hash column: not applicable to all 11 rows in this project** (read-only, no transaction is sent) — not repeated row by row.
+**Transaction-hash column**: applicable only to rows 3–8, which are the ones that would send a transaction. For rows 9–11, the read paths, it does not apply.
+
+> **Rows 1–8 were rewritten on 2026-09-16, when `/vault/manage` was added.** All eight previously read
+> `Not applicable + reason`, and the reason was correct at the time: the interface asked for no wallet and sent
+> no transaction. It now does both, so the verdicts are stale.
+>
+> **The status column distinguishes two things that are easy to run together:**
+>
+> - `logic proven` — a unit test asserts the decision. `test/wallet-flow.test.ts` and
+>   `test/wallet-amounts.test.ts` cover the wrong-chain refusal, the over-balance refusal, the
+>   balance-before-allowance ordering, the consumed-allowance case, the four receipt outcomes and the
+>   neutrality of a rejection. This is real evidence, and it is evidence about **arithmetic and decisions**.
+> - `interaction not measured` — no real wallet has been driven through this case. MetaMask shows a popup and
+>   a person clicks Approve, so a program cannot do it. **No row below claims otherwise.**
+>
+> The wallet available for the browser run was MetaMask on Base mainnet (chain 8453) with **no account
+> authorised for the site**, so the page rendered its no-wallet branch throughout. The connected branch
+> compiles and typechecks and is asserted for its wording; it has **not been rendered live**.
 
 | # | Failure class | How it is injected | What is asserted (wording + rendered result + state) | Evidence requirement | Status |
 |---|---|---|---|---|---|
-| 1 | Wallet not installed | **Not applicable + reason**: this interface does not ask for a wallet (UI-11 says plainly "no wallet is required or requested"), so a missing wallet changes no visible behaviour. **Covering project**: `erc4626-vault` | — | Not applicable | **Not applicable + reason** |
-| 2 | The user refuses to sign (`4001`) | **Not applicable + reason**: there is no signature request. **Covering project**: `erc4626-vault` (measured with a real MetaMask, presented neutrally) | — | Not applicable | **Not applicable + reason** |
-| 3 | Wrong chain | **Not applicable + reason**: with no wallet there is no "chain the wallet is on". The chain this console reads is decided by `VAULT_RPC` plus the `chainId` in the deployment record, and the page header shows it | — | Not applicable | **Not applicable + reason** |
-| 4 | Insufficient allowance | **Not applicable + reason**: read-only, there is no allowance. **Covering project**: `erc4626-vault` | — | Not applicable | **Not applicable + reason** |
-| 5 | Insufficient balance | **Not applicable + reason**: read-only, nothing is spent. **Covering project**: `erc4626-vault` (measured: an over-balance input is not sent) | — | Not applicable | **Not applicable + reason** |
-| 6 | Insufficient gas | **Not applicable + reason**: there is no transaction. **Covering project**: `erc4626-vault` | — | Not applicable | **Not applicable + reason** |
-| 7 | Transaction reverted | **Not applicable + reason**: there is no transaction. **Covering project**: `erc4626-vault` | — | Not applicable | **Not applicable + reason** |
-| 8 | Transaction replaced (`replaced`) | **Not applicable + reason**: no transaction, no pending state. **Covering project**: `erc4626-vault` | — | Not applicable | **Not applicable + reason** |
-| **9** | **RPC unreachable** | the console instance's `VAULT_RPC` points at a **port nothing listens on**, `http://127.0.0.1:8547` (the index service stays healthy). Cleaner than stopping anvil: it does not disturb the live chain that other evidence in the same session depends on. Stopping the real anvil is equivalent — either way the console sees a refused connection | ① the `Now` panel shows **"The chain could not be read."**, immediately followed by the sentence **"The chain node at http://127.0.0.1:8547 is not reachable. Check that a node is listening there and that VAULT_RPC points at it."**, and labels it with `endpoint` and `class: unreachable`; ② the page still returns **HTTP 200** (not 500); ③ the **`Then` panel still renders 174 candles** (`Indexed to block 12580`, `Lag 0`, `Events 18`) — this one is the point of the row: it proves the two sources fail independently; ④ the `Two sources` panel shows **"A comparison needs both sources. One of them is unavailable, so this panel does not guess."** | Screenshot: `docs/evidence/scenario-9-chain-down.png`; report: `docs/evidence/scenario-9-chain-down.txt` (exit 0); console: see §7 | **Passed** 2026-09-16 |
+| 1 | Wallet not installed | Open `/vault/manage` in a browser with no extension | `"No injected wallet was found in this browser. This app uses injected() …"`, and the deposit and redeem controls stay inert rather than accepting input that could never be signed | screenshot: **not run** | **implemented; interaction not measured** |
+| 2 | The user refuses to sign (`4001`) | Reject at the MetaMask prompt | A **neutral** line, never a red failure; the form returns to idle and says the user cancelled and nothing was signed. `mapWriteError` checks `4001` first so no later branch can reclassify it | screenshot: **not run** | **logic proven** (`test/wallet-flow.test.ts`: *a user rejection is its own phase, not a failure*, and the nested-cause case); **interaction not measured** |
+| 3 | Wrong chain | Wallet on chain 8453, page expecting 31337 | The controls are **disabled with a reason naming both chains** — *"Switch the wallet to chain 31337 — it is currently on chain 8453, where this deployment does not exist. Nothing is sent until it does."* — and **no wallet prompt appears** | screenshot: **not run** + transaction hash: **not applicable, nothing is sent** | **logic proven** (`decideDeposit` → `wrong-chain`, and it outranks an unparseable amount); **interaction not measured** |
+| 4 | Insufficient allowance | Fresh wallet, zero allowance, then deposit | The **approve step is offered instead of a deposit**; a deposit that would revert with `ERC20InsufficientAllowance` is never sent | screenshot: **not run** | **logic proven**, including the case where the allowance was consumed and must be re-read; **interaction not measured** |
+| 5 | Insufficient balance | Enter more than the wallet holds | The reason carries the **real balance, formatted** (`5555.0759` and the symbol), never the bare word "insufficient"; refused **before** any approval, because an approval needs no balance and approving first would spend gas to learn a free fact | screenshot: **not run** | **logic proven** (`decideDeposit` → `exceeds-balance`, and the balance check is asserted to win over the allowance check); **interaction not measured** |
+| 6 | Insufficient gas | Drain the wallet's ETH, then deposit | **No dedicated copy: this is a recorded gap.** The app does not pre-compute gas, so an under-funded wallet fails at the wallet or the node and that error arrives through the failure path | screenshot: **not run** | **not implemented as a pre-flight check** |
+| 7 | Transaction reverted | Force a revert, or deposit with an allowance that becomes insufficient | `"The chain reverted this transaction."` with the hash **kept** so it can be looked up, and viem's text in a collapsed `detail`. `mapReceipt` maps `'reverted'` to `failed` — **never** to `confirmed`, and never to still-pending | screenshot: **not run** + transaction hash: **not run** | **logic proven**; **interaction not measured** |
+| 8 | Transaction replaced (`replaced`) | Replace a pending transaction in the wallet | **No dedicated state: a recorded gap.** It surfaces as an unread receipt — *"The transaction was sent, but its receipt could not be read. It may still be on chain -- the explorer or a node will say which."* — which names the uncertainty instead of claiming a failure | screenshot: **not run** | **no dedicated state; recorded as a gap** |
+| **9** | **RPC unreachable** | the console instance's `VAULT_RPC` points at a **port nothing listens on**, `http://127.0.0.1:8547` (the index service stays healthy). Cleaner than stopping anvil: it does not disturb the live chain that other evidence in the same session depends on. Stopping the real anvil is equivalent — either way the console sees a refused connection | ① the `Now` panel shows **"The chain could not be read."**, immediately followed by the sentence **"The chain node at http://127.0.0.1:8547 is not reachable. Check that a node is listening there and that VAULT_RPC points at it."**, and labels it with `endpoint` and `class: unreachable`; ② the page still returns **HTTP 200** (not 500); ③ the **`Then` panel still renders the chart** (one body per candle, no empty state) with `Indexed to block` and `Lag` still shown — this one is the point of the row: it proves the two sources fail independently; ④ the `Two sources` panel shows **"A comparison needs both sources. One of them is unavailable, so this panel does not guess."** | Screenshot: `docs/evidence/scenario-9-chain-down.png`; report: `docs/evidence/scenario-9-chain-down.txt` (exit 0); console: see §7 | **Passed** 2026-09-16 |
 | **10** | **API unreachable** | the console instance's `VAULT_API` points at a **port nothing listens on**, `http://127.0.0.1:8788` (the chain stays healthy) | ① the `Then` panel shows **"The index service could not be read."** plus **"The index service is not reachable at http://127.0.0.1:8788/api/candles?bucket=60&limit=5000. It runs as a separate process; start it with \`node --experimental-strip-types src/api/cli.ts\` in the erc4626-vault-dapp repository."** — the sentence **carries the actual request URL**, which is the key to being able to diagnose it; ② the `Now` panel **still shows real on-chain readings** (`944.9241` USDC, `859.021905704231281673` shares, no failure wording); ③ the `Two sources` panel **refuses to answer** | Screenshot: `docs/evidence/scenario-10-index-down.png`; report: `docs/evidence/scenario-10-index-down.txt` (exit 0); console: see §7 | **Passed** 2026-09-16 |
-| **11** | **Stale data** | two steps, because **with static readings "a correct implementation" and "a caching implementation" look exactly alike**: ① record `Indexed to block` / `Lag` / `indexer last ran` from the page; ② **actually advance the index** (run the indexer once; it scans 59 blocks and writes 59 snapshots), then request the same page again | ① `Indexed to block` goes from **12580 → 12639**; ② `Lag` goes from **0 → 97 blocks** (the chain head the indexer recorded changed); ③ `indexer last ran` goes from **5m 11s → 4s**; ④ the service's sentence **"lagBlocks is measured against the chain head recorded at the last indexer run, not against the chain now."** is still on the page. **Four values changing at the same time is the proof that the page re-reads on every request and caches nothing** | Screenshot: `docs/evidence/scenario-11-data-freshness.png`; report: `docs/evidence/scenario-11-freshness.txt` (two parts, before/after, exit 0); console: see §7 | **Passed** 2026-09-16 |
+| **11** | **Stale data** | two steps, because **with static readings "a correct implementation" and "a caching implementation" look exactly alike**: ① record `Indexed to block` / `Lag` / `indexer last ran` from the page; ② **actually advance the index** (`node tools/catch-up.mjs --max-runs 1` in `../erc4626-vault-dapp`), then request the same URL again | ① `Indexed to block` moves (**12639 → 12648** in the recorded run); ② `Lag` moves (**97 → 2293 blocks** — the chain head the indexer recorded changed); ③ `indexer last ran` moves (**1h 13m → 0s**); ④ the service's sentence **"lagBlocks is measured against the chain head recorded at the last indexer run, not against the chain now."** is still on the page. **Several values changing at the same time, on a page that was not restarted, is the proof that it re-reads on every request and caches nothing.** The assertion is that each value CHANGED — not what it changed to, since those numbers move with the chain | Screenshot: `docs/evidence/scenario-11-data-freshness.png`; report: `docs/evidence/scenario-11-freshness.txt` (produced by `tools/capture-scenarios.mjs`, which captures both parts, runs the indexer in between, and judges the pair); console: see §7 | **Passed** 2026-09-16 |
 
 > **Why row 11 cannot be run only once**: if the indexer has not moved, a page showing `12580` could be
 > either "re-reading on every request" or "caching the first response" — **the two produce identical
@@ -193,9 +210,17 @@ the console column means "the console errors and uncaught exceptions this page p
 
 **The parts that have been run (not among the 11 classes, but facts this file has to record)**
 
+> The 11 classes are classes of failure, not pages. Since the app grew to four routes, one class can
+> apply to more than one page and the two do not have to behave the same way — the index being
+> unreachable is class 10 on `/vault` (where the chain's figures are still exact and still shown) and
+> a different situation on `/history` (which has no second source and must therefore show nothing).
+> Both are recorded below rather than folded into one row.
+
 | Scenario | How it was run | Result | Evidence |
 |---|---|---|---|
-| The full page with both services reachable | `node tools/browser-assert.mjs --url http://127.0.0.1:3103` | **14/14 passed**: HTTP 200, 4 panels, 169 rects / 169 `g`, 172 lines with 0 NaN, `totalSupply` shown as shares, raw uint256 not on the page, the flat-series sentence present, the tooltip carrying the raw strings, no failure wording, no hydration hint | `docs/evidence/browser-assert.txt` + `docs/evidence/console-live.png` |
+| The full page with both services reachable | `node tools/browser-assert.mjs --url http://127.0.0.1:3121` (the production build) | **51/51 passed**, of which the console's 14 are: HTTP 200, 4 panels, one candle body per candle with **0 NaN** coordinates, `totalSupply` shown as shares, raw uint256 not on the page, the flat-series sentence present, the tooltip carrying the raw strings, no failure wording, no hydration hint. The other 37 cover the landing page, the wallet page and the history page | `docs/evidence/browser-assert.txt` + `docs/evidence/console-live.png` |
+| The history page with the index reachable | the same run, section 7d | **17 assertions**: three tables rendered, the count label matches the rows actually painted, the printed tally sum equals the rendered per-kind counts, no raw uint256, no wallet asked for, the nav links all four routes | `docs/evidence/browser-assert.txt` + `docs/evidence/scenario-12-history-up.txt` |
+| The history page with the index **unreachable** | `node tools/capture-scenarios.mjs` (server on 3122) | **0 tables rendered.** It says the index could not be read, names the URL, says it has no second source to fall back on, and shows no figures at all — the substitution it exists to avoid | `docs/evidence/scenario-13-history-index-down.txt` |
 
 > **Rows 9, 10 and 11 have all now passed**, and each one has: a measurement report (a re-runnable
 > command + its exit code), a screenshot,
@@ -209,10 +234,10 @@ the console column means "the console errors and uncaught exceptions this page p
 
 | Step | Action | Assertion | Evidence | Status |
 |---|---|---|---|---|
-| 1 | Connect wallet | **Not applicable + reason**: this project is read-only, there is no wallet | — | **Not applicable** |
-| 2 | Approve | **Not applicable + reason**: same as above | — | **Not applicable** |
-| 3 | Deposit | **Not applicable + reason**: same as above. **Covering project**: `erc4626-vault` (real MetaMask, tx `0xbdeb4044…`, block 8320) | — | **Not applicable** |
-| 4 | Redeem | **Not applicable + reason**: same as above | — | **Not applicable** |
+| 1 | Connect wallet | **Now applicable**: `/vault/manage` offers a connect control, and after connecting it shows the address and the wallet's chain rather than a dash. The **connected branch has never been rendered live** — the wallet available for testing had no account authorised for the site | screenshot: **not run** | **implemented; interaction not measured** |
+| 2 | Approve | **Now applicable**: a deposit with an insufficient allowance offers the approve step first, and after the approval confirms the allowance is **re-read** rather than remembered | screenshot: **not run** | **logic proven**; **interaction not measured** |
+| 3 | Deposit | **Now applicable**: `deposit(uint256 assets, address receiver)` with the connected account as receiver. Would be evidenced by a **transaction hash, block number and `Deposit` event**, cross-checked against the chain's `totalAssets` before and after | screenshot: **not run** + tx hash: **not run** | **implemented; interaction not measured** |
+| 4 | Redeem | **Now applicable**: `redeem(uint256 shares, address receiver, address owner)`, one transaction with no approval | screenshot: **not run** + tx hash: **not run** | **implemented; interaction not measured** |
 | 5 | **The page reading exactly equals the chain** | **Applicable and already run**: the assertion reads anvil's `eth_call totalSupply()` (`0x18160ddd`) and compares it with the **share string on the rendered page**. Precision handling: the chain holds a raw uint256, the page holds a decimal string with trailing zeros stripped, and the two are made equivalent through `formatBaseUnits` | **Passed**. Measured: chain `859021905704231281673` ↔ page `859.021905704231281673`. (This row previously printed the chain value as `859021905704281673` — 18 digits, missing `4231`. The raw evidence and a live `eth_call` both give 21 digits; a truncated figure inside a row about exact equality was the worst possible place to have one) | `totalSupply rendered as SHARES…` in `docs/evidence/browser-assert.txt` | **Passed** |
 
 > Steps 1–4 of I3 are not applicable because **this project is not the vehicle for an end-to-end
@@ -224,7 +249,7 @@ the console column means "the console errors and uncaught exceptions this page p
 
 | Failure class | Which row of §5 in this file it reuses | Interface error readability (wording copied verbatim) | Status |
 |---|---|---|---|
-| RPC down | row 9 | **"The chain could not be read."** + the specific message for that failure (already implemented in the `Failure` component in `src/app/page.tsx`) | **Not run** |
+| RPC down | row 9 | **"The chain could not be read."** + the specific message for that failure (the `Failure` component, `src/components/Panels.tsx` — it moved there from the page when the app grew past one route, so that all four pages render a failure the same way) | **Not run** |
 | API down | row 10 | **"The index service is not reachable at \<URL\>. It runs as a separate process; start it with \`node --experimental-strip-types src/api/cli.ts\` in the erc4626-vault-dapp repository."** (already implemented in `src/lib/api.ts`) | **Not run** |
 | Wallet refuses to sign | row 2 | **Not applicable + reason**: there is no signature. **Covering project**: `erc4626-vault` (neutral wording, measured) | **Not applicable** |
 | Transaction replaced | row 8 | **Not applicable + reason**: there is no transaction. **Covering project**: `erc4626-vault` | **Not applicable** |
@@ -253,30 +278,57 @@ the console column means "the console errors and uncaught exceptions this page p
 ## 8. The G-F4 gate
 
 - [x] all four layers L1–L4 have a report; L2 is a **real browser** (the user's real Chrome driven by kimi-webbridge, not jsdom)
-- [x] **none of §5's 11 rows is `not run`** — 8 rows are marked "not applicable + reason" (legitimately),
-      **rows 9, 10 and 11 are all "passed"** 2026-09-16, each with a measurement report + a screenshot
-- [x] every failure case has a screenshot — `docs/evidence/scenario-9-chain-down.png`,
-      `scenario-10-index-down.png`, `scenario-11-data-freshness.png`
-      (a transaction hash is **not applicable to all 11 rows**: this project is read-only and sends no transaction)
+- [ ] **none of §5's 11 rows is `not run`** — **NOT SATISFIED as of 2026-09-16.** Rows 9, 10 and 11 are passed by measurement; rows 1–5 and 7 are `logic proven` with their wallet interaction **not measured**; row 6 is **not implemented as a pre-flight check**; row 8 has **no dedicated state**. Eight rows no longer carry a blanket "not applicable", and the four that need a real wallet say so instead of claiming a pass
+- [x] every failure case **that has been run** has a screenshot — `scenario-9-chain-down.png`,
+      `scenario-10-index-down.png`, `scenario-11-data-freshness.png`, and for the history page
+      `scenario-12-history-up.png` (three tables, each stating how much it is showing) and
+      `scenario-13-history-index-down.png` (the index gone, and **no** figures rendered at all).
+      All five are produced by `node tools/capture-screenshots.mjs`, which names each URL, waits for
+      the page's own content, and writes the file — so they can be re-taken after any change. The
+      wallet rows have **no screenshot** because they were not run
 - [x] console errors "empty or explainable" — §7 records five items. **Console events are still not captured
       directly** (residual gap, see the end of §7); the substitute is asserting that the page text carries no error and no hydration hint
 - [x] §1 records who ran it, how, and on what date (the author, 2026-09-16, run from inside the restricted shell,
       with the browser started by the daemon outside the sandbox, **no privilege escalation**)
 
-**G-F4 conclusion**: **passed** — 2026-09-16, the author.
+**G-F4 conclusion**: **NOT passed — one row is a real gap and four rows need a wallet.** 2026-09-16, the author.
 
-All three applicable rows passed by measurement, each with a re-runnable report and a screenshot. **And row 9's measurement caught a real defect**
-(the failure panel smearing viem's whole diagnostic dump across the screen), which was fixed and covered by 3 regression tests; see item 5 in §7.
+**What is genuinely proven.** 51 browser assertions pass against the **production build** (not just the dev
+server), and they are re-runnable with one command: `node tools/browser-assert.mjs --url http://127.0.0.1:3121`.
+Fourteen of them are the console's original assertions, unchanged and now at `/vault`; the tool measures how
+many of the total are the console's rather than hard-coding the split, so "the console survived the move"
+cannot silently become false. Seventeen more cover the history page, including two that read the page's own
+arithmetic back off the painted DOM — the count label against the rows actually rendered, and the printed tally
+sum against the rendered per-kind counts. The pre-flight decisions behind the wallet rows are proven in unit
+tests.
 
-**How this conclusion changed from "not passed"**: the previous round recorded G-F4 as **not passed**, because although all three rows had their implementation ready
-and their wording settled, they had **not actually been run even once** — the reason recorded at the time was "stopping the services would interrupt the live services that other evidence in the same session
-depends on". That reason held, and the fix was **a different injection method**: instead of stopping the shared services,
-start a console instance that points `VAULT_RPC` / `VAULT_API` at a **port nothing listens on**.
-For the code under test that is exactly equivalent to "the service process died" (both are a refused connection),
-and not one of the three shared services was interrupted. **This is one concrete return on "classify, do not abandon"**:
-the original obstacle was "I have no other way to produce unreachability", when in fact the way had been there all along.
+**What is not.** No transaction has been sent from this page. The four wallet rows in §5 and the four I3 steps
+above are `not measured` because MetaMask shows a popup and a person clicks Approve — a program cannot do it.
+The page's connected branch has never rendered live either: the wallet available had no account authorised for
+the site, so every browser run exercised the no-wallet branch only.
 
-**Residual gaps still recorded honestly** (they do not affect the passing verdict on those three rows):
+**This conclusion was previously `passed`, and that was correct for what the project was.** It was a read-only
+console, so the wallet classes genuinely did not exist and rows 9–11 were the whole applicable set. Adding
+`/vault/manage` changed what the gate is about, so the verdict moves with it. Changing a recorded verdict
+without saying so would be worse than either value.
+**Row 9's measurement caught a real defect** (the failure panel smearing viem's whole diagnostic dump
+across the screen), which was fixed and covered by 3 regression tests; see item 5 in §7.
+
+**How the conclusion moved, twice.** An earlier round recorded G-F4 as **not passed**, because although rows
+9–11 had their implementation ready and their wording settled, they had **not actually been run even once** —
+the reason recorded at the time was that stopping the services would interrupt the live services that other
+evidence in the same session depended on. That reason held, and the fix was **a different injection method**:
+instead of stopping the shared services, start a console instance that points `VAULT_RPC` / `VAULT_API` at a
+**port nothing listens on**. For the code under test that is exactly equivalent to "the service process died"
+(both are a refused connection), and not one of the shared services was interrupted. That is one concrete
+return on "classify, do not abandon": the obstacle was "I have no other way to produce unreachability", when
+the way had been there all along.
+
+Then the gate went back to **not passed**, for a different and better reason: the project gained a write path,
+so four rows that used to be `not applicable` are now `not measured`. The three read-path rows are unaffected
+by that.
+
+**Residual gaps recorded honestly** (they are separate from the wallet gap above):
 - end of §7: **console events are not captured directly**. kimi-webbridge's `evaluate` cannot look back at console
   output that already happened, so the substitute evidence is "assert that the page text carries no error and no hydration hint".
 - the remaining unverified items in `EVIDENCE-MAP.md` §3 (the accessibility baseline, a non-flat real dataset, whether the coverage gap is unavoidable).

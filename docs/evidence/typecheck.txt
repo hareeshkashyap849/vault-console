@@ -1,0 +1,5 @@
+$ node node_modules/typescript/bin/tsc --noEmit
+exit code: 0
+
+output:
+(no output)

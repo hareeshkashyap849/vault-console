@@ -78,36 +78,97 @@ const configFiles = ['next.config.ts', 'tsconfig.json', 'tailwind.config.ts', 'p
   });
 
 const lockPath = join(project, 'package-lock.json');
-const srcFiles = walk(join(project, 'src'));
-const checkFiles = [...walk(join(project, 'test')), ...walk(join(project, 'tools'))];
 
-const result = {
-  generatedAt: new Date().toISOString(),
-  node: process.version,
-  npm: (() => {
-    try {
-      // The npm shim cannot be spawned under the restricted sandbox (it needs cmd.exe), so the
-      // version is read from the JS entry point's own package.json rather than by running npm.
-      const cli = process.env.npmCli ?? 'E:/nodejs/node_modules/npm/package.json';
-      return JSON.parse(readFileSync(cli, 'utf8')).version;
-    } catch {
-      return 'unknown';
-    }
-  })(),
-  packageLock: (() => {
-    try {
-      return sha256(readFileSync(lockPath));
-    } catch {
-      return 'MISSING -- a build without a lockfile is not a reproducible build';
-    }
-  })(),
-  src: treeHash(srcFiles),
-  checks: treeHash(checkFiles),
-  config: treeHash(configFiles),
-};
+/**
+ * Read and hash the whole input set, once.
+ *
+ * A FUNCTION, because `--twice` must call it twice for real. The first version of `--twice` printed
+ * one already-computed result twice and called the two blocks "run 1" and "run 2" -- which proves
+ * nothing at all: the same object printed twice agrees with itself by construction, and the report
+ * would have claimed a reproducibility check that had not happened. The two calls below re-read
+ * every file from disk.
+ *
+ * It is still not the same claim as "two separate invocations of this command agree": this proves the
+ * hashes are deterministic over a fixed input set, and that no input changed between the two reads.
+ * Two invocations add "and the report does not depend on process state", which the manual procedure
+ * covered. The report says which one it is rather than letting the reader assume the stronger.
+ */
+function computeInputs() {
+  return {
+    generatedAt: new Date().toISOString(),
+    node: process.version,
+    npm: (() => {
+      try {
+        // The npm shim cannot be spawned under the restricted sandbox (it needs cmd.exe), so the
+        // version is read from the JS entry point's own package.json rather than by running npm.
+        const cli = process.env.npmCli ?? 'E:/nodejs/node_modules/npm/package.json';
+        return JSON.parse(readFileSync(cli, 'utf8')).version;
+      } catch {
+        return 'unknown';
+      }
+    })(),
+    packageLock: (() => {
+      try {
+        return sha256(readFileSync(lockPath));
+      } catch {
+        return 'MISSING -- a build without a lockfile is not a reproducible build';
+      }
+    })(),
+    src: treeHash(walk(join(project, 'src'))),
+    checks: treeHash([...walk(join(project, 'test')), ...walk(join(project, 'tools'))]),
+    config: treeHash(configFiles),
+  };
+}
+
+const result = computeInputs();
 
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(result, null, 2));
+} else if (process.argv.includes('--twice')) {
+  /**
+   * Two real passes, one report.
+   *
+   * WHY A FLAG AND NOT A PROCEDURE. The claim this row makes is "run it twice and the inputs are the
+   * same", and the way it was produced was: run the command, copy the output, run it again, copy that
+   * output, paste both into a text file. That is four chances to paste the wrong thing, and the file
+   * that results is a transcript rather than a result. With `--twice` the file is the output of the
+   * run that did the comparing.
+   *
+   * `generatedAt` is excluded from the comparison on purpose: it is a timestamp, and two readings at
+   * different moments are supposed to disagree about it.
+   */
+  const block = (r) => [
+    `generated   ${r.generatedAt}`,
+    `node        ${r.node}`,
+    `npm         ${r.npm}`,
+    `lockfile    ${r.packageLock}`,
+    `src         ${r.src.hash}   (${r.src.count} files)`,
+    `checks      ${r.checks.hash}   (${r.checks.count} files: test/ + tools/)`,
+    `config      ${r.config.hash}   (${r.config.count} files)`,
+  ];
+  const comparable = (lines) => lines.filter((l) => !l.startsWith('generated')).join('\n');
+
+  const first = block(result);
+  const second = block(computeInputs());
+  const same = comparable(first) === comparable(second);
+
+  console.log('=== pass 1 (every file read from disk) ===');
+  console.log(first.join('\n'));
+  console.log('');
+  console.log('=== pass 2 (the same set, read from disk again) ===');
+  console.log(second.join('\n'));
+  console.log('');
+  console.log(`VERDICT: the two passes ${same ? 'AGREE' : 'DISAGREE'} on every input`);
+  console.log('');
+  console.log('The generated time is deliberately not compared. The other five values are the node and');
+  console.log('npm versions, the lockfile hash, and the tree hashes of src/, test/ + tools/, and the four');
+  console.log('config files -- so if one changes, it names which input moved.');
+  console.log('');
+  console.log('WHAT THIS IS, EXACTLY: the same input set hashed twice from disk. It proves the hashes are');
+  console.log('deterministic and that nothing changed between the two reads. It is NOT the same claim as');
+  console.log('"two separate invocations of this command agree", which is what the manual procedure did;');
+  console.log('two invocations would also cover a report that depended on process state, and this report');
+  console.log('does not -- it reads files and prints them.');
 } else {
   console.log(`generated   ${result.generatedAt}`);
   console.log(`node        ${result.node}`);

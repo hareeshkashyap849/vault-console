@@ -21,7 +21,7 @@ The other browsers are untested. `untested` and `unsupported` are two different 
 
 | Browser | Version | Measured? | Measured result | Note |
 |---|---|---|---|---|
-| Chrome (the user's real profile, with MetaMask 13.48) | Chromium family, version follows the user's environment | **Yes** | **14/14 assertions passed** | see `docs/evidence/browser-assert.txt` and `console-live.png` |
+| Chrome (the user's real profile, with MetaMask 13.48) | Chromium family, version follows the user's environment | **Yes** | **51/51 assertions passed, 0 failed** | see `docs/evidence/browser-assert.txt` and `console-live.png`. The console's original 14 are unchanged; 17 of the rest cover `/history`, including two that read the page's own arithmetic back off the painted DOM |
 | Edge | untested | **No** | — | same Chromium engine, so the behaviour should match in theory, but **without a measurement it is not written as "supported"** |
 | Firefox | untested | **No** | — | not installed, not run |
 | Safari | untested | **No** | — | no macOS on this machine; `preserveAspectRatio="none"` and SVG behaviour on WebKit are **unverified** |

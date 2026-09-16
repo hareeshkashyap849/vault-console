@@ -12,4 +12,26 @@
   .figure {
     @apply font-mono tabular-nums;
   }
+
+  /*
+    Table cell spacing, defined once.
+
+    WHY THIS IS NOT JUST `px-4` ON EVERY CELL. The history page's widest table has seven
+    columns, the last two of which are a right-aligned number and a left-aligned hash. With no
+    padding between them the two HEADERS run together and read as one word -- `SHARES
+    TRANSACTION` -- which is visible in the screenshot in `docs/evidence/`, and was: this rule
+    exists because that is what the first captured screenshot showed.
+
+    The last cell keeps no right padding so the table still lines up with the panels above and
+    below it; padding there would push the table's right edge in by 1rem for no reason.
+  */
+  .data-table th,
+  .data-table td {
+    padding-right: 1rem;
+  }
+
+  .data-table th:last-child,
+  .data-table td:last-child {
+    padding-right: 0;
+  }
 }

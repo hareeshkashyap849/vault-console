@@ -26,11 +26,18 @@
    must make it visible that it may be stale.
 
    **What this project does is harder than a "TTL"**: there is **no TTL at all**, because nothing is kept.
-   - `src/app/page.tsx` exports `dynamic = 'force-dynamic'` and `revalidate = 0`;
+   - **all three read-only pages** — `src/app/page.tsx`, `src/app/vault/page.tsx` and
+     `src/app/history/page.tsx` — export `dynamic = 'force-dynamic'` and `revalidate = 0`. Declared per
+     page rather than inherited, deliberately: a new page that forgets it becomes cacheable, nothing in
+     the type system prevents that, and the first symptom would be a page showing a number that was
+     true a minute ago while claiming to be current;
    - `LIVE = { cache: 'no-store' }` in `src/lib/api.ts` is applied to **every single** `fetch`;
-   - the page has **no** client-side timer, no polling, no SWR/React Query cache.
+   - the pages have **no** client-side timer, no polling, no SWR/React Query cache.
      Reload = browser reload = one completely fresh server-side fetch.
-   - there is an assertion: `test/api.test.ts` → `sends no-store, because a cached console shows stale figures as current`.
+   - there is an assertion: `test/api.test.ts` → `sends no-store, because a cached console shows stale figures as current`;
+   - and the claim itself is **measured**, not just asserted in source: scenario 11 captures the page,
+     advances the index, captures the same URL again, and requires `Indexed to block`, `Lag` and
+     `indexer last ran` to have changed (`docs/evidence/scenario-11-freshness.txt`).
 
    **Why there is no timed polling**: the first version of this project (the candlestick chart in the
    sibling project `erc4626-vault`) did use a 15-second `setInterval` poll, and rule 3 of §0 of the
@@ -148,7 +155,7 @@ When the service is unavailable it shows `—` and notes "the index service is u
 | F3 iron rule | Which section of this file owns it | Where the evidence is | Status |
 |---|---|---|---|
 | 1 Only one place may compute money | §3 forbidden-pattern list | `docs/evidence/check-single-source-clean.txt` + the falsification file | **Built** |
-| 2 Do not cache on-chain state | §0 rule 1 + the §1 table | `test/api.test.ts` → `sends no-store`; `force-dynamic` in `page.tsx` | **Built** |
+| 2 Do not cache on-chain state | §0 rule 1 + the §1 table | `test/api.test.ts` → `sends no-store`; `force-dynamic` in all three read-only pages (`/`, `/vault`, `/history`) | **Built** |
 | 3 A read must refresh itself | §0 rules 2, 3 | **N/A** (no refresh control, no timer); covered by `erc4626-vault` | **N/A + reason** |
 | 4 A write must distinguish four states | the "transaction state" row in the §1 table | **N/A** (no write operation); covered by `erc4626-vault` | **N/A + reason** |
 | 5 A failure must not be silent | the §3 failure list in `FRONTEND-SPEC.md` | 3 classes have an implementation + browser assertions; 8 are written up as N/A | **Partly applicable, built** |
