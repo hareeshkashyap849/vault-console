@@ -1,6 +1,6 @@
 import { indexApi, ServiceError } from '@/lib/api';
 import { loadDeployment, chainConfig } from '@/lib/deployment';
-import { readDeployment } from '@/lib/chain';
+import { ChainError, readDeployment } from '@/lib/chain';
 import { PriceChart } from '@/components/PriceChart';
 import { displayBaseUnits, displayDecimal, duration, timeLabel } from '@/lib/format';
 import type { Candle, Status } from '@/lib/types';
@@ -70,22 +70,52 @@ function Figure({ label, value, suffix, hint }: { label: string; value: string; 
 }
 
 /**
- * A failure, rendered as a sentence rather than a stack.
+ * A failure, rendered as a sentence rather than a stack trace.
  *
- * The two service errors mean different things and are labelled differently: "not
- * reachable" is a process that is not running, "refused" is a process that answered and
- * said no. Collapsing them would send a reader to the wrong fix.
+ * THREE THINGS A FAILURE PANEL MUST NOT DO, each learned from this page's own output:
+ *
+ *   1. COLLAPSE DIFFERENT FAILURES INTO ONE MESSAGE. "not reachable" is a process that is
+ *      not running; "refused" is a process that answered and said no. They have opposite
+ *      fixes, so they are labelled differently -- and so are the chain's own classes, which
+ *      is what `ChainError.kind` is for.
+ *
+ *   2. PRINT THE ERROR OBJECT. The first version rendered `error.message`, and for a chain
+ *      failure viem puts the URL, the JSON-RPC request body, `Raw Call Arguments`, a docs
+ *      link and a version number in there. A screenshot of the failure path showed a full
+ *      screen of JSON where the specification promises two lines. The technical text is kept
+ *      and shown, but behind a disclosure, because a reader needs the sentence and whoever
+ *      debugs it needs the dump.
+ *
+ *   3. SAY "fetch failed" AND STOP. The sentence has to name the endpoint, since "the chain
+ *      is unreachable" is unactionable when three services and two env vars are in play.
  */
 function Failure({ title, error }: { title: string; error: unknown }) {
-  const e = error instanceof ServiceError ? error : null;
+  const service = error instanceof ServiceError ? error : null;
+  const chain = error instanceof ChainError ? error : null;
+  const headline = error instanceof Error ? error.message : String(error);
+  const detail = service?.detail ?? chain?.detail ?? null;
+  const showDetail = detail !== null && detail !== headline;
+
   return (
     <div className="rounded-md border border-amber-800/60 bg-amber-950/30 p-4 text-sm text-amber-200">
       <p className="font-medium">{title}</p>
-      <p className="mt-1 whitespace-pre-wrap text-amber-200/80">
-        {error instanceof Error ? error.message : String(error)}
-      </p>
-      {e?.detail && e.detail !== e.message ? (
-        <p className="mt-2 text-xs text-amber-200/60">detail: {e.detail}</p>
+      <p className="mt-1 whitespace-pre-wrap text-amber-200/80">{headline}</p>
+      {chain !== null ? (
+        <p className="mt-2 text-xs text-amber-200/60">
+          endpoint: <span className="figure">{chain.rpcUrl}</span> · class: {chain.kind}
+        </p>
+      ) : null}
+      {showDetail ? (
+        // Deliberately collapsed. It is here so a failure can be diagnosed without a
+        // terminal, and out of the way so it cannot bury the sentence above.
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-amber-200/60">
+            technical detail (the raw error, for debugging)
+          </summary>
+          <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded bg-slate-950/60 p-2 text-xs text-amber-200/50">
+            {detail}
+          </pre>
+        </details>
       ) : null}
     </div>
   );

@@ -45,17 +45,33 @@ where the deployment record is read from.
 ### Checks
 
 ```powershell
-npm test                              # 104 tests, 4 files
+npm test                              # 107 tests, 5 files
 npm run typecheck                     # tsc --noEmit, must be exit 0
 npm run check                         # tests + typecheck + single-source static check
 node tools/check-single-source.mjs    # no second implementation of amount arithmetic
 node tools/browser-assert.mjs         # live browser assertions; needs all three processes
 node tools/capture-fixtures.mjs       # re-capture test/fixtures from the running service
+node tools/scenario-report.mjs <file> --expect chain-down|index-down|index-caught-up
+                                      # judge a saved page against a failure scenario
 ```
 
 `tools/browser-assert.mjs` drives a **real** browser through the kimi-webbridge daemon. It is
 not part of `npm test`, because it needs three processes and a browser, and a test that can
 only pass on one machine is worse than a test that lives where that is obvious.
+
+**Watching a failure on purpose.** Point the console at a port nothing listens on and it
+exercises exactly one failure path, without disturbing the shared services:
+
+```powershell
+$env:VAULT_RPC='http://127.0.0.1:8547'; $env:VAULT_API='http://127.0.0.1:8787'
+npx next start --port 3110            # the chain is "down"; the index still works
+$env:VAULT_RPC='http://127.0.0.1:8545'; $env:VAULT_API='http://127.0.0.1:8788'
+npx next start --port 3111            # the index is "down"; the chain still works
+```
+
+That is how `docs/evidence/scenario-9-chain-down.png` and `scenario-10-index-down.png` were
+produced, and it is the reason those two rows are recorded as passing rather than as
+implemented-but-unverified.
 
 ---
 
@@ -162,9 +178,10 @@ version. `src/lib/endpoints.ts` holds that rule and the reason.
 - **Read-only, so most of the write-failure taxonomy does not apply.**
   `前端规格.md` §3 has all 11 classes with an explicit verdict per row; 8 are marked
   `不适用` with the reason. The three that do apply — RPC unreachable, API unreachable, stale
-  data — have implemented behaviour and browser assertions. The wallet classes are covered by
-  the sibling `erc4626-vault` dApp, not here.
-- **The fixtures are one snapshot of one vault.** 169 candles, all at price `1.1`. The chart's
+  data — are **implemented and measured**: `docs/evidence/scenario-9-*.txt`,
+  `scenario-10-*.txt`, `scenario-11-*.txt`, each with a screenshot. The wallet classes are
+  covered by the sibling `erc4626-vault` dApp, not here.
+- **The fixtures are one snapshot of one vault.** Every candle is at price `1.1`. The chart's
   flat-series path is therefore the well-exercised one; a moving price is covered by unit
   tests on synthetic candles, not by live data.
 - **The chart is SVG, not a charting library.** No zoom, no pan, no crosshair, no time-range
@@ -174,4 +191,10 @@ version. `src/lib/endpoints.ts` holds that rule and the reason.
   service says so. The page repeats that note rather than smoothing it over.
 - **No accessibility audit.** Semantic landmarks and `role="img"` with `aria-label` are
   present and the chart carries its figures in text, but no screen reader was run against it.
-  `支持矩阵与验收.md` records this as untested rather than passing.
+  `支持矩阵与验收.md` §3 records this as untested rather than passing.
+- **Only one browser was tested.** Chrome, driven through kimi-webbridge. Firefox, Safari and
+  narrow viewports are listed as untested in `支持矩阵与验收.md` §1, not as supported.
+- **The console event log is not captured directly.** kimi-webbridge evaluates in the page but
+  cannot replay console output that already happened, so the browser assertions check the
+  rendered text for error and hydration strings instead. An uncaught exception that leaves no
+  textual trace would not be caught.

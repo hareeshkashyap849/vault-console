@@ -48,6 +48,102 @@ export interface ChainConfig {
 }
 
 /**
+ * A chain read that failed, described in a sentence instead of a stack trace.
+ *
+ * THE BUG THIS FIXES
+ *
+ * When the RPC endpoint is down, viem throws `ContractFunctionExecutionError` and its
+ * `message` is an entire diagnostic dump: the URL, the JSON-RPC request body, `Raw Call
+ * Arguments`, a link to `https://viem.sh/docs/contract/readContract`, and the viem version.
+ * The page rendered all of it inside the failure panel -- a full screen of JSON-RPC payload
+ * where the specification says there should be "The chain could not be read." plus the
+ * specific reason. It was found by screenshotting the failure path rather than by reading it,
+ * because in source the line is only `error.message`.
+ *
+ * The text is useful to a DEVELOPER and useless to a reader, and it buries the one fact that
+ * matters: which endpoint was unreachable. So the class of failure is named, the endpoint is
+ * quoted, and the full text is kept in `detail` for whoever has to debug it.
+ *
+ * `cause` is walked as well as `name`, because viem wraps: the interesting error (the
+ * `fetch failed` / `ECONNREFUSED`) is usually one or two levels down from the one that
+ * reaches us.
+ */
+export class ChainError extends Error {
+  readonly rpcUrl: string;
+  readonly detail: string;
+  readonly kind: 'unreachable' | 'timeout' | 'call-failed' | 'unknown';
+
+  constructor(message: string, rpcUrl: string, detail: string, kind: ChainError['kind']) {
+    super(message);
+    this.name = 'ChainError';
+    this.rpcUrl = rpcUrl;
+    this.detail = detail;
+    this.kind = kind;
+  }
+}
+
+/** The deepest message in a `cause` chain, which is where the transport error lives. */
+function rootCause(err: unknown): string {
+  let current: unknown = err;
+  let last = '';
+  for (let depth = 0; depth < 8 && current instanceof Error; depth += 1) {
+    last = current.message;
+    current = (current as Error & { cause?: unknown }).cause;
+  }
+  return last;
+}
+
+function describeChainFailure(err: unknown, url: string): ChainError {
+  const name = err instanceof Error ? err.name : 'UnknownError';
+  const message = err instanceof Error ? err.message : String(err);
+  const root = rootCause(err);
+  // viem's own message is the dump; it goes to `detail`, not to the reader.
+  const detail = root && root !== message ? `${message}\n--- root cause ---\n${root}` : message;
+
+  if (name === 'TimeoutError') {
+    return new ChainError(
+      `The chain node at ${url} did not answer in time. The vault's figures cannot be shown, because a ` +
+        'stale reading presented as current is worse than no reading.',
+      url,
+      detail,
+      'timeout',
+    );
+  }
+
+  if (name === 'HttpRequestError' || /fetch failed|ECONNREFUSED|ENOTFOUND|socket hang up|network/i.test(`${message} ${root}`)) {
+    return new ChainError(
+      `The chain node at ${url} is not reachable. Check that a node is listening there and that VAULT_RPC ` +
+        'points at it.',
+      url,
+      detail,
+      'unreachable',
+    );
+  }
+
+  if (name === 'ContractFunctionExecutionError' || name === 'ContractFunctionRevertedError') {
+    return new ChainError(
+      `The vault contract did not answer a read call. That usually means the deployment record's address ` +
+        `has no contract on the chain VAULT_RPC points at (${url}), which happens after a redeploy.`,
+      url,
+      detail,
+      'call-failed',
+    );
+  }
+
+  return new ChainError(`The chain could not be read: ${name}.`, url, detail, 'unknown');
+}
+
+/** Run a chain read, turning any failure into a `ChainError`. */
+async function withChainErrors<T>(fn: () => Promise<T>): Promise<T> {
+  const url = rpcUrl();
+  try {
+    return await fn();
+  } catch (err) {
+    throw describeChainFailure(err, url);
+  }
+}
+
+/**
  * The addresses come from the deployment record, so they are not typed twice.
  *
  * The console reads the SAME record the deploy script wrote and the indexer reads. A
@@ -55,43 +151,47 @@ export interface ChainConfig {
  * wrong -- the page would query an address with no code and report zeros.
  */
 export async function readDeployment(config: ChainConfig) {
-  const client = createPublicClient({
-    transport: http(rpcUrl(), { batch: true }),
+  return withChainErrors(async () => {
+    const client = createPublicClient({
+      transport: http(rpcUrl(), { batch: true }),
+    });
+
+    // Read in one round trip. These are all `view` calls, so nothing here can change state.
+    const [totalAssets, totalSupply, assetAddress, shareDecimals, assetSymbol, assetDecimals] = await Promise.all([
+      client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'totalAssets' }),
+      client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'totalSupply' }),
+      client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'asset' }),
+      client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'decimals' }),
+      client.readContract({ address: config.asset, abi: ERC20_ABI, functionName: 'symbol' }),
+      client.readContract({ address: config.asset, abi: ERC20_ABI, functionName: 'decimals' }),
+    ]);
+
+    return {
+      totalAssets: totalAssets.toString(),
+      totalSupply: totalSupply.toString(),
+      assetAddress,
+      shareDecimals: Number(shareDecimals),
+      assetSymbol,
+      assetDecimals: Number(assetDecimals),
+    };
   });
-
-  // Read in one round trip. These are all `view` calls, so nothing here can change state.
-  const [totalAssets, totalSupply, assetAddress, shareDecimals, assetSymbol, assetDecimals] = await Promise.all([
-    client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'totalAssets' }),
-    client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'totalSupply' }),
-    client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'asset' }),
-    client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'decimals' }),
-    client.readContract({ address: config.asset, abi: ERC20_ABI, functionName: 'symbol' }),
-    client.readContract({ address: config.asset, abi: ERC20_ABI, functionName: 'decimals' }),
-  ]);
-
-  return {
-    totalAssets: totalAssets.toString(),
-    totalSupply: totalSupply.toString(),
-    assetAddress,
-    shareDecimals: Number(shareDecimals),
-    assetSymbol,
-    assetDecimals: Number(assetDecimals),
-  };
 }
 
 /** One holder's position, for the address the reader asks about. */
 export async function readPosition(config: ChainConfig, account: `0x${string}`) {
-  const client = createPublicClient({ transport: http(rpcUrl(), { batch: true }) });
-  const [shares, maxWithdraw, balance] = await Promise.all([
-    client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'balanceOf', args: [account] }),
-    client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'maxWithdraw', args: [account] }),
-    client.readContract({ address: config.asset, abi: ERC20_ABI, functionName: 'balanceOf', args: [account] }),
-  ]);
-  return {
-    shares: shares.toString(),
-    maxWithdraw: maxWithdraw.toString(),
-    assetBalance: balance.toString(),
-  };
+  return withChainErrors(async () => {
+    const client = createPublicClient({ transport: http(rpcUrl(), { batch: true }) });
+    const [shares, maxWithdraw, balance] = await Promise.all([
+      client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'balanceOf', args: [account] }),
+      client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'maxWithdraw', args: [account] }),
+      client.readContract({ address: config.asset, abi: ERC20_ABI, functionName: 'balanceOf', args: [account] }),
+    ]);
+    return {
+      shares: shares.toString(),
+      maxWithdraw: maxWithdraw.toString(),
+      assetBalance: balance.toString(),
+    };
+  });
 }
 
 export type LiveRead = Awaited<ReturnType<typeof readDeployment>>;
