@@ -1,10 +1,20 @@
 # Public deployment runbook: vault on Base Sepolia, front end on Vercel
 
-> **STATUS: NOT RUN YET.** Nothing in this file has been executed. It is the procedure, written
-> before the fact so that the one step that needs a funded key is the only step that has to wait.
-> Every value marked *measured* was checked from this machine on 2026-09-16; everything else is
-> *to be filled in when it runs*. When it has been run, this header gets replaced with what
+> **STATUS: NOT RUN YET.** Nothing in this file has been executed against a testnet. It is the
+> procedure, written before the fact so that the one step that needs a funded key is the only step that
+> has to wait. Every value marked *measured* was checked from this machine on 2026-09-16; everything
+> else is *to be filled in when it runs*. When it has been run, this header gets replaced with what
 > actually happened — including anything that failed.
+>
+> **What HAS been retired, so it cannot bite later**: the Vercel configuration path in step 4. The
+> console needs `VAULT_DEPLOYMENT` because a host has no sibling `erc4626-vault` checkout, and that was
+> an assumption until it was tested. It was tested by building and running the console with the variable
+> pointing at a record **outside both repositories** (`next build` → exit 0, four routes, then
+> `next start` on port 3131): the page rendered and its own header named the file it had read
+> (`toolchain/_vault-record-standin.json`). The stand-in was a copy of the **Anvil** record, not a
+> testnet one — a record claiming a Base Sepolia address that does not exist would be a fabricated
+> address in the one file three programs treat as the source of truth. On Vercel the same variable will
+> point at `deployments/base-sepolia.json` inside this repository, and the mechanism is identical.
 
 ## What is being deployed, and why it is worth doing
 
@@ -71,21 +81,60 @@ address), and `next.config.ts` at build time (for the chain id it hands to the b
 deployed in, and being wrong fails **silently** in both directions: too early finds no events, too
 late misses the early ones.
 
-## Step 3 — index it
-
-The indexer runs against Base Sepolia the same way it runs against mainnet, but the range it can
-read is governed by what the endpoint will serve. Measure that first rather than assuming:
+**Then validate the record before pointing anything else at it:**
 
 ```powershell
-cd ..\base-swap-indexer
-node --experimental-strip-types tools\probe-rpc-range.mjs     # what will this endpoint answer?
+cd ..\erc4626-vault
+node scripts\check-deployment-record.mjs deployments\base-sepolia.json --rpc https://sepolia.base.org
 ```
 
-**Open question, to be answered by measurement rather than guessed**: whether the vault project's
-own indexer (`erc4626-vault-dapp`, which indexes `Deposit`/`Withdraw`/`YieldReported`) needs the same
-historical-range treatment. It reads a narrow event set from a single vault, so its ranges are far
-smaller than the swap indexer's — but "smaller" is not "served", and the probe is how that gets
-settled.
+Three programs read this file and each reads a different subset of it, so a record that is merely
+well-formed is not a deployment: the check requires the keys each reader actually needs, and with
+`--rpc` it compares the record against the chain — code at the vault address, `asset()` and `owner()`
+on the vault, and the asset's `decimals()` and `symbol()`.
+
+**This step exists because the mistake already happened once, in the documentation.** An earlier
+version of `deployments/README.md` documented the testnet record with `address` where the console reads
+`vault`, and with `asset` as an object where the console reads a string. Nothing had been deployed, so
+nothing caught it; the first real deployment would have produced a record that `loadDeployment()`
+refuses — at the end of the process, after the gas was spent. Running the validator against that old
+format produces seven specific failures, including one that names the rename
+(`the record does not use "address" where the readers expect "vault"`).
+
+## Step 3 — index it
+
+The indexer runs against Base Sepolia the same way it runs against mainnet. What it needs from the
+endpoint was an open question when this runbook was written, and it has since been measured rather
+than assumed:
+
+```bash
+node ../../toolchain/probe-sepolia-ranges.mjs
+```
+
+Measured 2026-09-16 against `https://sepolia.base.org` (chainId 84532, head 46,914,896), asking for
+`Transfer` logs of the test USDC — a busy permanent contract, so if a range is served for it, it is
+served for a vault with a handful of events:
+
+| Window | head-1k | head-50k | head-200k |
+|---|---|---|---|
+| 2,000 blocks | 3,097 logs | 2,194 logs | 5,433 logs |
+| 10,000 blocks | 12,959 logs | 41,377 logs | 26,975 logs |
+| 50,000 blocks | `HTTP 413 eth_getLogs is limited to a 10,000 range` | same | same |
+| 100,000 blocks | same | same | same |
+
+**Two conclusions, and the second one is the useful one:**
+
+1. **No archive restriction.** 200,000 blocks back answers normally, unlike mainnet where two of three
+   public endpoints refuse historical ranges outright.
+2. **The per-request cap is 10,000 blocks.** The vault indexer asks for at most **300** blocks per pass
+   (`maxCatchupBlocks` in its config, overridable with `MAX_CATCHUP_BLOCKS`), so it is an order of
+   magnitude inside the cap — **no change is needed to index Base Sepolia**, only `RPC_URL=https://sepolia.base.org`
+   and a record whose `deployBlock` is the real deployment block.
+
+That is the whole difference between "it will probably work" and a number: the failure mode this avoids
+is discovering the cap on the deployment day, on a machine that has just spent test ETH.
+
+**To fill in when it runs**: swaps indexed, the block range, and the indexer's own report.
 
 ## Step 4 — the front end on Vercel
 
