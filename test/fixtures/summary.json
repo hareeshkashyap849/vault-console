@@ -1,0 +1,22 @@
+{
+  "kinds": {
+    "Deposit": {
+      "count": 11,
+      "assets": "1200124097"
+    },
+    "Withdraw": {
+      "count": 5,
+      "assets": "315199997"
+    },
+    "YieldReported": {
+      "count": 1,
+      "assets": "50000000"
+    }
+  },
+  "totalEvents": 17,
+  "firstEventBlock": 35,
+  "lastEventBlock": 2354,
+  "lastIndexedBlock": 8251,
+  "unknownKinds": [],
+  "note": "assets is the SUM of each event's assets field as a uint256 decimal string -- exact, and never a JS number. YieldReported carries the amount reported, not the vault's totalAssets at the time."
+}

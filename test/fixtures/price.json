@@ -1,0 +1,29 @@
+{
+  "series": [
+    {
+      "blockNumber": 8251,
+      "blockHash": "0x54b1697d8febd27303cec25202e976090c4a73fdec045cda59361273ac046a3e",
+      "timestamp": 1789542264,
+      "totalAssets": "934924100",
+      "totalSupply": "849930996648200851546",
+      "price": "1.1"
+    }
+  ],
+  "decimals": {
+    "asset": 6,
+    "share": 18
+  },
+  "count": 1,
+  "limit": 1,
+  "maxLimit": 5000,
+  "seriesFromBlock": 168,
+  "coverage": {
+    "vaultStartBlock": 8,
+    "seriesFromBlock": 168,
+    "eventsFromBlock": 35,
+    "coverageBeginsAt": 8,
+    "startsLaterThanDeployment": true,
+    "note": "The price series begins at block 168, but this service has records from block 8. NOTHING IS KNOWN about the blocks in between: the node serving this deployment does not hold state that far back, so no snapshot could be taken. This is a gap in the data, NOT a period of zero activity -- do not draw or read it as one."
+  },
+  "note": "These prices are DERIVED ON READ from the raw totalAssets and totalSupply stored in vault_snapshots. They are not the price at any instant other than the block they were read at: each point is the vault as it stood AFTER that block, so no point predicts or interpolates a price between blocks, and the newest point is only as fresh as the last indexer run. One whole share is priced in asset base units and formatted with the asset decimals. `price` is null where totalSupply was 0 -- an empty vault has no price, and 1 would be an invented one."
+}

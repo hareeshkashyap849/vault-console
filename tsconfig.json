@@ -1,0 +1,59 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    /* `noUncheckedIndexedAccess` matches the sibling service repository. It is the setting
+       that caught a real class of mistake there (reading `rows[0].field` off an array that
+       might be empty), and there is no reason for the console to be more permissive about
+       indexing than the service it reads from. */
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    /* Relative imports carry an explicit `.ts` extension, and this flag is what allows them.
+       It requires `noEmit` (set above), which this project has -- Next compiles the source
+       and never asks `tsc` to emit.
+
+       WHY THE EXTENSION IS THERE AT ALL: Node's type stripping resolves a relative import
+       LITERALLY. `import { x } from './dep'` is looked up as the file named `dep` and fails
+       with `ERR_MODULE_NOT_FOUND`, because ESM does no extension guessing. `'./dep.ts'`
+       works. Both were measured before choosing. Without it, `node --experimental-strip-types`
+       could not run anything that imports across files, so `src/lib/format.ts` was testable
+       while `src/lib/api.ts` -- which imports `./endpoints.ts` -- was not, even though its
+       tests existed. Turbopack and `tsc` both accept the extension, so it costs nothing. */
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

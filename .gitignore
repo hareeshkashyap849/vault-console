@@ -1,0 +1,18 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# `next-env.d.ts` is NOT ignored, though Next's own default template ignores it.
+# Next regenerates it, but it is a source file: it holds the triple-slash references that
+# make `next/image`, `next/link` and the CSS-module types resolve. A clone without it
+# typechecks differently from one with it, and "the file is regenerated anyway" is only true
+# after a successful `next dev` or `next build` -- which is exactly what a fresh clone is
+# trying to do. Committed on purpose.
+
+# Environment overrides for the two upstream services. The defaults live in
+# next.config.ts so a fresh clone runs against the standard local ports; this file is
+# only for pointing the console somewhere else.
+.env
+.env.local
+.env.*.local

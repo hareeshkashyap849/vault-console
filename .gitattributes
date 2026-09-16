@@ -1,0 +1,14 @@
+* text=auto eol=lf
+
+# Text files are normalised to LF in the repository. Without this, every `git add` on
+# Windows emits dozens of "LF will be replaced by CRLF" warnings and a clone gets different
+# bytes than the one the tests and hashes were taken from -- which matters here because
+# `tools/build-inputs.mjs` hashes file CONTENT. A CRLF checkout would hash differently from
+# the recorded values in `支持矩阵与验收.md` §2, so the reproducibility evidence would stop
+# matching for a reason that has nothing to do with the code.
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

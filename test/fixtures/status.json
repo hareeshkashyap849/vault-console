@@ -1,0 +1,25 @@
+{
+  "healthy": true,
+  "chainId": 31337,
+  "vault": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+  "asset": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "startBlock": 8,
+  "lastIndexedBlock": 8251,
+  "chainHeadAtLastRun": 8251,
+  "lagBlocks": 0,
+  "eventCount": 17,
+  "snapshotCount": 6081,
+  "seriesFromBlock": 168,
+  "eventsFromBlock": 35,
+  "coverage": {
+    "vaultStartBlock": 8,
+    "seriesFromBlock": 168,
+    "eventsFromBlock": 35,
+    "coverageBeginsAt": 8,
+    "startsLaterThanDeployment": true,
+    "note": "The price series begins at block 168, but this service has records from block 8. NOTHING IS KNOWN about the blocks in between: the node serving this deployment does not hold state that far back, so no snapshot could be taken. This is a gap in the data, NOT a period of zero activity -- do not draw or read it as one."
+  },
+  "updatedAt": "2026-09-16T10:42:45.567Z",
+  "staleSeconds": 6051,
+  "note": "lagBlocks is measured against the chain head recorded at the last indexer run, not against the chain now."
+}

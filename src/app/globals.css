@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  The figure style is defined once, here, because this console renders the same kind of
+  value in several places -- a token amount, a share count, a price -- and they must look
+  identical everywhere. `tabular-nums` stops the digits shifting sideways when a live
+  value updates, which is the single most distracting thing a dashboard can do.
+*/
+@layer components {
+  .figure {
+    @apply font-mono tabular-nums;
+  }
+}
