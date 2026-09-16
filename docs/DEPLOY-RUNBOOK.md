@@ -62,6 +62,29 @@ job, and the honest response is to say so rather than to look for a way around i
 
 ## Step 1 — deploy the vault (needs the funded key)
 
+**Rehearsed on a fork before anything real was at stake.** The whole of step 1 and step 2 was run
+against an `anvil --fork-url https://sepolia.base.org` — real Base Sepolia state, fake ETH — and the
+resulting record was validated with the same script:
+
+```
+Estimated total gas used for script: 2038355
+Estimated amount required: 0.000022421905 ETH
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL
+```
+
+```
+PASS  the endpoint is on the record's chain (record says 84532)  (endpoint says 84532)
+PASS  there is bytecode at the vault address  (5070 bytes)
+PASS  the vault's asset() equals the recorded asset  (0x036CbD53842c5426634e7929541eC2318f3dCF7e)
+PASS  the vault's owner() equals the recorded owner  (0x52787b9F96fCc1fCbCE34f4F0E4e363D9F05352e)
+PASS  the asset reports the recorded decimals  (6 on chain, record says 6)
+PASS  the asset reports the recorded symbol  (USDC on chain, record says USDC)
+```
+
+**So the real deployment costs about 0.0000224 ETH** — four orders of magnitude below the smallest
+faucet drip. That number is worth having in advance: it means a shortage of gas is never the problem,
+and it turns "I need test ETH" into "I need a dust-sized amount".
+
 ```powershell
 cd web3-development-execute\projects\erc4626-vault
 $env:PRIVATE_KEY='0x...'                       # throwaway, Base Sepolia only
@@ -74,6 +97,9 @@ code, must not be the zero address, and its decimals must be the expected 6) and
 that the vault's `asset()`, `owner()` and starting totals are what was intended. A deployment that
 passes those checks is still only *probably* right — the on-chain evidence is the transaction hash
 and the block number, which the next step records.
+
+`record-from-broadcast.mjs` builds the record from the forge broadcast file rather than from the
+console output, because the console is easy to mistype and the JSON is what the tool actually did.
 
 **To fill in when it runs**: vault address, deploy transaction hash, deploy block, deployer address.
 
