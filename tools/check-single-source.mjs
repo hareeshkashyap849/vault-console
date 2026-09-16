@@ -20,7 +20,7 @@
  *   BigInt division in a component   arithmetic outside the one module allowed to do it
  *
  * The allow-list is by FILE, not by line: `src/lib/format.ts` is the single implementation
- * point named in `前端规格.md` §2.2, and everything else in `src/` must route through it.
+ * point named in `FRONTEND-SPEC.md` §2.2, and everything else in `src/` must route through it.
  * An allow-list by line number would break on the next edit and get widened to nothing.
  *
  * Usage:
@@ -33,7 +33,7 @@ import { join, relative, resolve } from 'node:path';
 
 const project = resolve(import.meta.dirname, '..');
 
-/** The one module allowed to know about decimals. Named in `前端规格.md` §2.2. */
+/** The one module allowed to know about decimals. Named in `FRONTEND-SPEC.md` §2.2. */
 const AMOUNT_MODULE = 'src/lib/format.ts';
 
 /**

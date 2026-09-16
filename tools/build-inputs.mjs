@@ -19,8 +19,8 @@
  *
  * Two runs with the same output mean the same source, the same lockfile and the same
  * toolchain -- which is the claim worth making. Documenting it required running this twice,
- * and doing that is a separate step from having the tool: see `支持矩阵与验收.md` §2, where
- * the state is recorded honestly as `未验证` until the second run has happened.
+ * and doing that is a separate step from having the tool: see `SUPPORT-AND-SIGNOFF.md` §2,
+ * where the state was recorded honestly as `unverified` until the second run had happened.
  *
  * Usage:
  *

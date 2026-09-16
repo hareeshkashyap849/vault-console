@@ -1,0 +1,122 @@
+# Invariant ledger (path B · F2) — vault-console
+
+> **One of the F2 deliverables.** Gate G-F2 requires all three to be present (ledger / evidence
+> map / test doubles) — this file is the first of the three. Basis: the delivery blueprint,
+> §12.2 (its frontend path, F1-F5); definitions and method: the workspace's frontend correctness
+> guideline, §2.1.
+>
+> **One invariant = one sentence saying "what must never be true".**
+> It has to be falsifiable — if you cannot write the sentence "what would break it", it is not an
+> invariant, it is a wish.
+>
+> **The entries in this ledger were not designed, they were recorded.** While this repository was
+> being implemented it **really** violated INV-01 / INV-02 / INV-05 / INV-07 — three of them
+> caught by tests, one caught by a browser assertion. Each one records "how it was violated at the
+> time" — an invariant that has never been violated is usually just one nobody checked.
+
+---
+
+## 0. The rules this ledger obeys
+
+1. **Every invariant must have at least one automated assertion.** An entry with no assertion is
+   not allowed to sit in the table padding out the count.
+2. **What cannot be automated must say why**, and give manual review steps + reviewer + review
+   date (§3).
+3. **There are only three statuses**: `Not built` / `Built` / `Falsified`.
+   - `Built` must be able to point at a concrete `file:test name`.
+   - `Falsified` = the assertion produced a counterexample (**this is good news**).
+4. **You may not change an assertion to make it go green.** Falsified entries are handled per §4.
+5. **Only three kinds of assertion count as evidence** (guideline §Structure 3): external ground
+   truth / cross-component consistency / property.
+
+---
+
+## 1. Project invariants
+
+| ID | Invariant statement | Why it has to hold | Where the matching automated assertion is (file:test name) | Assertion kind | Status |
+|---|---|---|---|---|---|
+| **INV-01** | **A raw base unit integer never appears on the page as an amount**: `totalSupply` must render as a share count (with a decimal point), and that specific uint256 string from the contract **must not appear anywhere in the rendered text** | **This repository violated it**: the first version used one formatting function for both `totalAssets` and `totalSupply`, while the service returns **raw uint256 base units** for both (`../erc4626-vault-dapp/src/api/price.ts`, verbatim: *"RAW uint256 values in BASE UNITS, exactly as"*). The page printed the shares as `859,021,905,704,231,281,673`. It **looks like a legitimate grouped number**, so on `totalAssets` (6 decimals, `944924100`) it looked perfectly normal | Pure function: `test/format.test.ts` → `displayBaseUnits -- the chain's raw amounts, ready for the page`, three of them<br>Contract: `test/contract.test.ts` → `/api/price`, three of them<br>**Browser**: `tools/browser-assert.mjs` → `totalSupply rendered as SHARES, not as the raw uint256` and `the raw uint256 string does NOT appear as a standalone figure` | On-chain reconciliation (the browser assertion reads the chain's `totalSupply()`, not a number I hard-coded) | **Built** |
+| **INV-02** | **No `NaN` exists in the coordinates drawn for a zero-range price series**, and the range span is `span > 0` | When the price is `1.1` throughout, `min === max`, so `(v-min)/(max-min)` = `0/0` → every y coordinate is NaN → **SVG silently draws nothing**: no exception, no warning, no console output, just a blank panel, and a reader takes it as "there is no history", when there are in fact 169 candles. **This defect cannot be seen in the source code**; only asserting the coordinates finds it | Pure function: `test/chart-geometry.test.ts` → `expands a flat range instead of dividing by zero`, `every y coordinate is finite for a flat series -- the assertion the bug would fail`, `produces a finite geometry for every candle in the real flat series`<br>**Browser**: `tools/browser-assert.mjs` → `NO NaN coordinates -- the flat-series guard works in a real browser` (measured: 172 lines / 169 rectangles, 0 NaN attributes) | Property (asserts "no NaN exists" over all inputs, not against one expected value) | **Built** |
+| **INV-03** | **The two sources fail independently of each other**: when the chain is unreachable the `Then` panel still shows history; when the index is unreachable the `Now` panel still shows the current on-chain reading; when the two are not both available the `Two sources` panel **refuses to give a comparison verdict** | `Promise.all` turns either source dying into a whole-page 500 — **that was exactly this project's first version's symptom** (HTTP 500). And "take the first successful result" is worse: it labels stale numbers as current. The page's whole value is the **side-by-side** pairing of the two sources; merging them cancels the reason the page exists | Structure: `src/app/page.tsx` uses `Promise.allSettled` plus a per-panel `status === 'rejected'` branch<br>**Measured in the real environment (2026-09-16)**: scenario 9 (`VAULT_RPC` pointing at the dead port 8547) → `Now` errors, `Then` **still renders 174 candles**, the comparison panel refuses to answer; scenario 10 (`VAULT_API` pointing at the dead port 8788) → the reverse holds. Evidence `docs/evidence/scenario-9-chain-down.txt`, `scenario-10-index-down.txt`, each with a screenshot | Cross-component consistency (what is asserted is "the other panel is still there", i.e. independence between the two sources) | **Built**, and **proved in the real environment** (no longer just a structural assertion) |
+| **INV-04** | **The two formatters are asymmetric on purpose, and the direction that can be checked must really be checked**: `formatBaseUnits` **refuses** input with a decimal point (it throws), while `formatDecimal` **cannot** refuse a raw integer string | This is INV-01's structural line of defence. If `formatBaseUnits` receives `"1.1"`, the caller took the value from the wrong field — and what `BigInt('1.1')` throws mentions only the string `"1.1"`, **it does not mention "you used the wrong formatting function"**, so it has to be written as a sentence a human can read. The opposite direction **cannot be done**: the price `"2"` and a small amount `"2"` are the same string; the difference is only which field it came from, and only the caller knows that | `test/format.test.ts` → `REFUSES a decimal string -- that input means the caller grabbed the wrong formatter`, `THE PAIR IS ASYMMETRIC ON PURPOSE, and the asymmetry is the protection`, `passes a whole-number price through, because "2" is a legal price` | Property (asserts over mutually exclusive input domains) | **Built** |
+| **INV-05** | **The index's event stream reconciles with on-chain state**: `Deposit − Withdraw + YieldReported = totalAssets` (all in `BigInt`, each term from the service, `totalAssets` from the price series, i.e. from the chain) | This is the only automatable check that "the index did not mis-record the books". **This repository got this invariant wrong first**: the first version wrote it as "the per-kind totals summed = totalAssets", which gives `1565324094`, while the correct answer is `934924100` — because `YieldReported` carries an amount that was **already in the vault**, not an addition to it. The service's own note says this.<br>More to the point: **this checker's first run also caught its own author** — the original assertion parsed the candles' OHLC with `BigInt(c.open)`, and that is a **decimal string** `"1.1"`, which throws `SyntaxError: Cannot convert 1.1 to a BigInt` outright | `test/contract.test.ts` → `reconciles to the vault's total assets -- gross in, minus gross out, plus reported yield`, `the naive per-kind sum does NOT equal totalAssets, and the difference is the trap`, `the summary flow identity equals the price series' last totalAssets`<br>Live: `test/contract-live.test.ts` → `the flow identity holds against the chain` | **Cross-component consistency** (the service's event table vs the chain's `totalAssets()`, two independent queries) | **Built** |
+| **INV-06** | **`Sequence`**: the console's types must match the service that is running — the field-name sets of the four endpoints are equal one by one; one extra or one missing fails | `SummaryResponse` once declared `counts`/`totals`, while the service sends `kinds`/`totalEvents`. `tsc` was perfectly happy, because **a wrong type is still a type** — it just describes something nobody sends; and nothing called `indexApi.summary()`, so there was not even a runtime disagreement. **A frontend whose types are fiction is worse than one with no types: it reads as if it had been verified.** | `test/contract.test.ts` → `has exactly the declared fields -- the ones this console originally got wrong` (using a fixture **captured verbatim** from the service, generated by `tools/capture-fixtures.mjs`)<br>Live: `test/contract-live.test.ts` → four `has the fields … declares` | External ground truth (the fixture is bytes the service produced itself, not hand-written) | **Built** |
+| **INV-07** | **One mathematical value has only one rendering**: `"1.10"`, `"1.1000"`, `"1.1"` must render as the same string; and the integer part of `"934924100"` **must never be touched by trailing-zero trimming** | One candle's four values may be written by the service in different spellings, and displayed as one candle they have to agree. The other half matters more: **the first version's trim regex was wrong**, and `"934924100"` would be trimmed to `"9349241"` — turning 934.9241 USDC into 93.49241 USDC, **silently and looking completely normal** | `test/format.test.ts` → `normalises trailing zeros so one candle's four values print alike`, `passes a whole-number price through`, `formatDecimal -- an ALREADY-formatted decimal string`, the whole group | Property (equivalence classes + boundary) | **Built**. **This regex was changed 4 times before it was right**; the four wrong forms and each one's cause are recorded one by one in that function's comments (`\d+?` → `2.0`; `\d+` → `2.00`; `\d*?` → `2.`; the alternation version → **still** `2.`) |
+| **INV-08** | **When the service is unavailable, the interface shows `—` and the reason, never a substitute value computed on the spot** | A substitute share price would disagree with the index next to it, and two disagreeing numbers on one screen are worse than one missing number — the reader cannot tell which to believe. Likewise `status.coverage.note` is **copied verbatim** rather than reworded: it is the service's own statement about its data gap, and rewording it would soften it into "there was no activity in that period" | `src/app/page.tsx`'s `price = priceResult.status === 'fulfilled' ? … : null` and `hint={price === null ? 'the index service is unavailable' : 'from the index service'}`<br>`test/format.test.ts` → `shows an em dash for null -- an empty vault has no price, and 0 is a claim`<br>**Browser**: `tools/browser-assert.mjs` → `the page says the price did not move` (a flat price has to be said out loud) | Cross-component consistency | **Built** |
+
+**Coverage check for the six iron rules**
+
+| F3 iron rule | Which row in the ledger | Where the assertion is | Status |
+|---|---|---|---|
+| 1 Only one place may do money arithmetic (decimals and conversion must not appear in two places) | **INV-01 / INV-04** | `test/format.test.ts` + `tools/check-single-source.mjs` (+ the counter-proof) | **Built** |
+| 2 Do not cache on-chain state (an in-memory stale value must have an expiry time) | **INV-03 / INV-08** | `test/api.test.ts` → `sends no-store`; `page.tsx`'s `force-dynamic`; **no client-side state container** (`STATE-OWNERSHIP.md` §1) | **Built** |
+| 3 Reads must refresh themselves (a manual refresh must really re-read) | **Not applicable + reason**: this interface has no refresh control and no timer; refreshing is a browser refresh = necessarily a new request. Covered by `erc4626-vault` (the wallet dApp) | see `STATE-OWNERSHIP.md` §0 rules 2, 3 | **Not applicable + reason** |
+| 4 Writes must distinguish four states (they may not be collapsed into "success") | **Not applicable + reason**: read-only, no write operations, no transaction state. Covered by `erc4626-vault`. The analogous requirement in this project is that **the two sources' error copy must differ** (`"The chain could not be read."` vs `"The index service is not reachable at …"`), and that half is measured | the two rows in `FRONTEND-SPEC.md` §3; `browser-assert.mjs` asserts no failure copy is present | **Partly applicable, built** |
+| 5 Failures must not be silent (4001 is neutral; three classes blocked before send) | **INV-03 / INV-08** | `FRONTEND-SPEC.md` §3, row by row; `test/api.test.ts` → the three failure-classification assertions | **Partly applicable, built** |
+| 6 Nothing may just "look right" (assert the computed rendering, not attributes) | **INV-02 / INV-01** | `tools/browser-assert.mjs`: asserts whether the **rendered** DOM's SVG **coordinate attributes** contain NaN, and whether the raw uint256 appears in the **rendered text** — both are "rendered output", not source constants | **Built** |
+
+---
+
+## 2. Falsification record (counterexamples that really happened in this repository)
+
+**This is the most valuable section of this ledger.** Four invariants were really violated during
+implementation, and each one left a trace of "the assertion going from red to green". Per §4's
+handling table, all four took the **"fix the code"** path.
+
+| ID | Counterexample (the raw symptom the assertion reported) | When it was falsified | Handling | Fix |
+|---|---|---|---|---|
+| INV-01 | The browser assertion reported: `page shows 859,021,905,704,231,281,673; chain base units are 859021905704231281673` — what the page displayed was the raw uint256 | 2026-09-16 | **Fix the code** | Split into `displayBaseUnits` (raw → decimal) and `displayDecimal` (already formatted → display), and made `formatBaseUnits` refuse input with a decimal point (INV-04). Every call site in `page.tsx` and `PriceChart.tsx` was changed to the right one |
+| INV-02 | In the first version of `test/chart-geometry.test.ts`, `rangeFor([1.0, 2.0])` was passed **bare numbers** instead of candle objects → `Number(undefined)` = NaN → both extremes were filtered out by `filter(isFinite)` → `rangeFor` returned `null` → the assertion ran against a **scale that produces NaN**. It passed its own setup check and **would also have passed a wrong implementation** | 2026-09-16 | **Fix the code (fix the test's setup)** | Build the fixture from real candle objects, and `assert.ok(range)` to explicitly confirm the scale is valid. The point of recording this is: **a test fixture itself can be fake**, and "an assertion exists" is not the same as "the assertion is valid" |
+| INV-05 | The contract test's first run: `AssertionError`, sum = `1565324094` vs `totalAssets` = `934924100`. In the same run another assertion threw `SyntaxError: Cannot convert 1.1 to a BigInt` | 2026-09-16 | **Fix the code (fix the invariant itself)** | The invariant itself was written wrong; it was changed to the flow identity `Deposit − Withdraw + Yield = totalAssets`; and "the naive per-kind sum is wrong" was **pinned as its own separate assertion**, to stop anyone walking into it again. The other one was changed to parse the decimal string with `parseAmount(..., 6)` |
+| INV-07 | `test/format.test.ts` reported three different results: `'2.0'` (`\d+?`), `'2.00'` (`\d+`), `'2.'` (`\d*?` and the alternation version) | 2026-09-16 | **Fix the code** | It ended up as two steps: first `replace(/(\.\d*?)0+$/, '$1')` to trim the zeros, then `replace(/\.$/, '')` to drop the orphaned dot. The four wrong forms and each one's cause are written into the function's comments one by one — **because every one of them looks right** |
+| INV-06 | The contract test's **author** wrote `assert.deepEqual(keysOf(body), [...])` with the expected array in reading order rather than alphabetical order, so `count` vs `coverage` was reported. The assertion's **object** was right; the way it compared was wrong | 2026-09-16 | **Fix the code (fix the comparison)** | `.sort()` on both sides. This is not an invariant being falsified, it is a defect in the **assertion implementation** — recorded here separately because its lesson is the same kind as INV-02's: the checker is wrong too |
+
+---
+
+## 3. Invariants that cannot be automated (with the reason + manual review)
+
+| ID | Invariant | Why it cannot be automated | Manual review steps | Reviewer | Review date |
+|---|---|---|---|---|---|
+| MAN-01 | **Every number on the page agrees with the source labelled next to it** (what is labelled `Now` really comes from the chain, what is labelled `Then` really comes from the index) | An automated assertion can confirm "both panels exist" and "some number appeared", but **deciding which source a number belongs to** needs knowing what it ought to be; and "what it ought to be" can only come from those two sources themselves. What can be done at the usability level is **partial** coverage: `browser-assert.mjs` already asserts the on-chain `totalSupply()` matches what the page shows, and the contract test asserts the API's shape | ① Stop the index service, refresh the page, confirm the `Now` panel's numbers **did not change** while the `Then` panel shows an error box; ② stop anvil, refresh the page, confirm the `Then` panel **did not change** while the `Now` panel errors; ③ restore both, refresh, confirm both panels come back. All three steps have re-runnable commands in `BROWSER-TEST-PLAN.md` §5 | the author | 2026-09-16 (the **expected** outcomes of steps ①② are written in `BROWSER-TEST-PLAN.md`; actually stopping the services and re-running **has not been executed**, see that file's §5 status column) |
+| MAN-02 | **No reading on the page is missing its source label** | "The source is labelled" is a **semantic** judgement; a machine can check "a `source` text exists", it cannot check "this `source` text is telling the truth" | Read the page through and confirm one by one that every number has source text next to it; `grep` every value rendering site and confirm the `source` prop of the `<Panel>` it sits in is non-empty | the author | 2026-09-16 (all 4 panels were already reviewed by hand against these steps) |
+| MAN-03 | **The chart "looks like it is describing the price" rather than describing something else** | `PriceChart`'s accessible label and caption already give the numbers, but "does the shape honestly express those numbers" is a visual judgement | Open the page and confirm: ① when the price is flat it is a horizontal line through the middle, not a blank; ② the caption's numbers agree with the tooltip's numbers; ③ after switching to a dataset whose price really did move (`VAULT_API` pointing at another vault), the shape shows rises and falls | the author | 2026-09-16 (① ② confirmed, screenshot kept at `docs/evidence/console-live.png`; ③ **not executed**, there is no dataset with a moving price in the local vault — recorded as an open item) |
+
+> This section is not empty; all three have concrete steps. MAN-01's step ③ and MAN-03's step ③
+> are **not yet executed** and are recorded in `BROWSER-TEST-PLAN.md` as "not run",
+> **not written up as passing**.
+
+---
+
+## 4. Handling when the status is `Falsified` (three paths, all of them leave a trace)
+
+| Handling | Applies when | The record that must be left behind |
+|---|---|---|
+| **Fix the code** | the invariant is right, the implementation is wrong | the fix commit + the raw output of the assertion going from red to green ← **all 5 in this repository took this path** |
+| Downgrade the requirement | the invariant itself is too strong / was written wrong | the restated invariant + whether the client knows |
+| Write it into residual risk | a known violation that will not be fixed this cycle | an entry in the residual-risk list + written client acceptance |
+
+> **The forbidden fourth path**: loosening the assertion, deleting the assertion, or marking the
+> test as skipped.
+> This repository has **not** deleted or skipped any assertion. There is one **deliberate
+> exclusion** that needs explaining: `tools/run-tests.mjs` excludes `contract-live.test.ts` from
+> `npm test`, because it needs three running processes. This is not "skipping a failing test" —
+> when the service is reachable that file is **6/6 passing** (`docs/evidence/contract-live.txt`),
+> and **running it on its own** reproduces it.
+> The reason for the exclusion is written in a comment in the runner, so it cannot be read as an
+> oversight.
+
+---
+
+## 5. Gate G-F2 (this file's part)
+
+- [x] Every invariant has a `file:test name`, or went into §3 with the reason it cannot be automated
+- [x] Each of the six iron rules points at a row in the ledger (3 not applicable + reason)
+- [x] The status column has no empty values; rows marked `Built` produce a result immediately (`docs/evidence/tests.txt`)
+- [x] All the example rows are deleted (no `INV-EX-*` in the tables)
+
+**G-F2 conclusion**: **passing (self-assessed)** — 2026-09-16, the author.
+All 8 invariants are `Built`, plus 3 manual review items (two of whose sub-steps are marked as not executed).
+**Not client acceptance**; the reason is in `SUPPORT-AND-SIGNOFF.md` §5.
+
+> Companions: `EVIDENCE-MAP.md` (what each invariant's evidence can and cannot prove),
+> `TEST-DOUBLES.md` (whether the doubles the assertions rely on are strict enough).

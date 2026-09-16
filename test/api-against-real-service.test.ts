@@ -4,7 +4,7 @@
  * THE PROBLEM THIS SOLVES
  *
  * `test/api.test.ts` replaces `fetch` with a function I wrote. That replacement is a test
- * double, and `替身清单.md` requires every double to have a cross-check: the same input fed
+ * double, and `TEST-DOUBLES.md` requires every double to have a cross-check: the same input fed
  * to both the double and the real object, asserting the same conclusion.
  *
  * For a URL-construction client that cross-check is available in its strongest form. The

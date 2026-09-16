@@ -92,7 +92,7 @@ check('server-rendered HTML is not the error page', !html.includes('Internal Ser
 
 // ---- 2. drive the real browser ----------------------------------------------------------
 
-await wb('navigate', { url: PAGE, newTab: true, group_title: 'Vault Console 断言' });
+await wb('navigate', { url: PAGE, newTab: true, group_title: 'Vault Console assertions' });
 
 // Wait for the chart to exist rather than sleeping a fixed amount: the client component
 // hydrates after the RSC payload arrives and the wait is what makes this reproducible.

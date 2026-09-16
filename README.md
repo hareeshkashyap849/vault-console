@@ -158,7 +158,7 @@ src/lib/api.ts                typed client; classifies unreachable / refused / m
 src/lib/chain.ts              live reads through viem
 src/lib/deployment.ts         reads the vault address from the deploy record, never a copy
 src/lib/types.ts              every amount typed as a string
-test/                         104 tests incl. fixtures captured from the service
+test/                         107 tests incl. fixtures captured from the service
 tools/                        assert + capture + static check + test runner
 docs/                         the F1-F5 evidence trail
 ```
@@ -176,11 +176,11 @@ version. `src/lib/endpoints.ts` holds that rule and the reason.
 - **Not deployed anywhere public.** It runs against a local Anvil chain. No hosted instance,
   so nothing here is evidence about a production environment.
 - **Read-only, so most of the write-failure taxonomy does not apply.**
-  `前端规格.md` §3 has all 11 classes with an explicit verdict per row; 8 are marked
-  `不适用` with the reason. The three that do apply — RPC unreachable, API unreachable, stale
-  data — are **implemented and measured**: `docs/evidence/scenario-9-*.txt`,
-  `scenario-10-*.txt`, `scenario-11-*.txt`, each with a screenshot. The wallet classes are
-  covered by the sibling `erc4626-vault` dApp, not here.
+  `FRONTEND-SPEC.md` §3 has all 11 classes with an explicit verdict per row; 8 are marked
+  `N/A + reason`. The three that do apply — RPC unreachable, API unreachable, stale data — are
+  **implemented and measured**: `docs/evidence/scenario-9-*.txt`, `scenario-10-*.txt`,
+  `scenario-11-*.txt`, each with a screenshot. The wallet classes are covered by the sibling
+  `erc4626-vault` dApp, not here.
 - **The fixtures are one snapshot of one vault.** Every candle is at price `1.1`. The chart's
   flat-series path is therefore the well-exercised one; a moving price is covered by unit
   tests on synthetic candles, not by live data.
@@ -191,10 +191,38 @@ version. `src/lib/endpoints.ts` holds that rule and the reason.
   service says so. The page repeats that note rather than smoothing it over.
 - **No accessibility audit.** Semantic landmarks and `role="img"` with `aria-label` are
   present and the chart carries its figures in text, but no screen reader was run against it.
-  `支持矩阵与验收.md` §3 records this as untested rather than passing.
+  `SUPPORT-AND-SIGNOFF.md` §3 records six rows: five untested, one not applicable.
 - **Only one browser was tested.** Chrome, driven through kimi-webbridge. Firefox, Safari and
-  narrow viewports are listed as untested in `支持矩阵与验收.md` §1, not as supported.
+  narrow viewports are listed as untested in `SUPPORT-AND-SIGNOFF.md` §1, not as supported.
 - **The console event log is not captured directly.** kimi-webbridge evaluates in the page but
   cannot replay console output that already happened, so the browser assertions check the
   rendered text for error and hydration strings instead. An uncaught exception that leaves no
   textual trace would not be caught.
+
+---
+
+## The verification documents, and where they come from
+
+The seven `F1`–`F5` documents at the repository root are the working record behind the code
+above — the requirements each panel must satisfy, the invariants, the evidence map, the
+failure-scenario matrix and its results:
+
+| Document | Phase |
+|---|---|
+| `FRONTEND-SPEC.md` | F1 — user-visible behaviour and the failure classes |
+| `STATE-OWNERSHIP.md`, `INVARIANTS.md`, `EVIDENCE-MAP.md`, `TEST-DOUBLES.md` | F2 — correctness designed up front, plus the F3 single-source-of-truth check |
+| `BROWSER-TEST-PLAN.md` | F4 — four test layers, and the failure scenarios that were really run |
+| `SUPPORT-AND-SIGNOFF.md` | F5 — browser matrix, build reproducibility, accessibility, sign-off |
+
+**On their provenance, stated plainly.** They follow a repeatable delivery process with
+numbered phases, gates and required artefacts: a software-delivery blueprint, a frontend
+correctness guideline, an environment capability list, and a per-project template. Those
+process documents are not part of this repository, so the seven files refer to them by name
+and section rather than by path, and every such reference has been rewritten that way. What
+is in this repository is the filled-in result, not the skeleton it was filled in from.
+
+**They are honest documents, which is the point of publishing them.** Several rows say
+`Untested`, `Not run`, or `N/A + reason`; the invariants ledger has a section recording
+invariants that were **falsified** during development, and the browser plan explains why a
+gate was first written as not-passed and what changed it. Those are the parts worth reading.
+If every row said "passed", the document would be worth nothing.
