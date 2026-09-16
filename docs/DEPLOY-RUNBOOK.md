@@ -146,36 +146,51 @@ format produces seven specific failures, including one that names the rename
 
 ## Step 3 — index it
 
-The indexer runs against Base Sepolia the same way it runs against mainnet. What it needs from the
-endpoint was an open question when this runbook was written, and it has since been measured rather
-than assumed:
+**The whole path has been rehearsed on a Base Sepolia fork** (`anvil --fork-url https://sepolia.base.org`):
+a vault deployed at chain 84532, a real `Deposit` of 10 USDC, the indexer run against it, the index API
+serving it, and a console **built for chain 84532** rendering it — all in one sequence, with the same
+record and the same configuration shape the public deployment will use:
 
-```bash
-node ../../toolchain/probe-sepolia-ranges.mjs
+```
+Now    Total assets 10 USDC · Total shares 10 · Price per share 1 USDC (from the index service)
+Then   2026-09-16T23:27:00.000Z  open 1 …
+index  healthy, lastIndexed 46916401, 1 event, 4 snapshots
+       Deposit  block 46916401  assets 10000000  shares 10000000000000000000
 ```
 
-Measured 2026-09-16 against `https://sepolia.base.org` (chainId 84532, head 46,914,896), asking for
-`Transfer` logs of the test USDC — a busy permanent contract, so if a range is served for it, it is
-served for a vault with a handful of events:
+**And it found a real defect — in the rehearsal itself, which is where it belongs.**
+
+The index API takes `chainId` and `vault` from the **deployment record**, not from the database it
+serves. The first rehearsal run started the API with the fork's database but without
+`DEPLOYMENT_RECORD`, so it reported `chainId: 31337` and the *local Anvil* vault address while serving
+fork events — and `/api/price` answered `503 share decimals are unknown`, because it tried to read
+`decimals()` from an address that has no code on that chain.
+
+Two things are worth keeping from that:
+
+1. **Every component that reads the vault must be given the same record.** The indexer, the API and the
+   console each resolve it separately (`DEPLOYMENT_RECORD`, `VAULT_DEPLOYMENT`), and getting one of them
+   wrong does not produce an error — it produces a service that reports a different vault than the one
+   it indexed. On the real deployment there is one record and one set of variables, and this is the
+   failure to check for first.
+2. **The API failed loudly rather than serving a wrong number.** A 503 naming the missing decimals is a
+   better outcome than a price derived from nothing, and it is the reason this was a five-minute fix
+   instead of a wrong chart nobody questioned.
+
+**Measured endpoint limits, so the indexer's settings are not guesses.** Against
+`https://sepolia.base.org` (chainId 84532, head 46,914,896), asking for `Transfer` logs of the test USDC:
 
 | Window | head-1k | head-50k | head-200k |
 |---|---|---|---|
 | 2,000 blocks | 3,097 logs | 2,194 logs | 5,433 logs |
 | 10,000 blocks | 12,959 logs | 41,377 logs | 26,975 logs |
 | 50,000 blocks | `HTTP 413 eth_getLogs is limited to a 10,000 range` | same | same |
-| 100,000 blocks | same | same | same |
 
-**Two conclusions, and the second one is the useful one:**
-
-1. **No archive restriction.** 200,000 blocks back answers normally, unlike mainnet where two of three
-   public endpoints refuse historical ranges outright.
-2. **The per-request cap is 10,000 blocks.** The vault indexer asks for at most **300** blocks per pass
-   (`maxCatchupBlocks` in its config, overridable with `MAX_CATCHUP_BLOCKS`), so it is an order of
-   magnitude inside the cap — **no change is needed to index Base Sepolia**, only `RPC_URL=https://sepolia.base.org`
-   and a record whose `deployBlock` is the real deployment block.
-
-That is the whole difference between "it will probably work" and a number: the failure mode this avoids
-is discovering the cap on the deployment day, on a machine that has just spent test ETH.
+**No archive restriction** (200,000 blocks back answers normally, unlike mainnet where two of three
+public endpoints refuse historical ranges), and a **10,000-block per-request cap**. The vault indexer
+asks for at most **300** blocks per pass (`maxCatchupBlocks`), so it is an order of magnitude inside the
+cap — **no change is needed to index Base Sepolia**, only `RPC_URL=https://sepolia.base.org` and a record
+whose `deployBlock` is real.
 
 **To fill in when it runs**: swaps indexed, the block range, and the indexer's own report.
 
