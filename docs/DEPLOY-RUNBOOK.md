@@ -37,11 +37,28 @@ documentation says so.
 | The deploy script's interface | `PRIVATE_KEY`, optional `BASE_SEPOLIA_RPC_URL`, `ASSET_ADDRESS`, `OWNER_ADDRESS` | `script/Deploy.s.sol` |
 | Gas needed | well under 0.01 ETH — one `YieldVault` deployment, plus one ERC-20 if a custom asset is used | the contract is ~30 lines on top of OpenZeppelin; the faucet drips are 0.1–0.5 ETH, i.e. 10–50× what is needed |
 
-**Getting test ETH** (Base's own docs, re-checked 2026-09-16): [Bware Labs](https://bwarelabs.com/faucets)
-and [Ethereum Ecosystem](https://www.ethereum-ecosystem.com/faucets/base-sepolia) need no account;
-[thirdweb](https://thirdweb.com/base-sepolia-testnet), [Alchemy](https://basefaucet.com/) and
-[Coinbase CDP](https://portal.cdp.coinbase.com/products/faucet) (0.1 ETH/24h) need one. The account
-is a **throwaway, testnet-only key**, and it must never be the same key as anything else.
+**Getting test ETH — measured, and the documented list is stale.** Base's own docs point at eight
+faucets; on 2026-09-16 six of them were tried from a real browser and **not one worked without an
+account or a funded mainnet address**:
+
+| Faucet | What the page actually said |
+|---|---|
+| [Ethereum Ecosystem](https://www.ethereum-ecosystem.com/faucets/base-sepolia) (documented as no login) | **"This deployment is temporarily paused"** |
+| [Bware Labs](https://bwarelabs.com/faucets) (documented as no registration) | Cloudflare **origin DNS error** — the domain no longer resolves |
+| [Blast API](https://blastapi.io/faucets) (Bware's successor) | **service deprecation notice**, redirects to Alchemy |
+| [ethfaucet.com](https://ethfaucet.com/networks/base) | the form works and the address is accepted, then the claim **redirects to an Alchemy signup page** |
+| [Alchemy / basefaucet.com](https://basefaucet.com/) | the form is usable without signing in, and on submit: **"Insufficient balance! You need at least 0.001 ETH on Ethereum Mainnet."** |
+| [Coinbase CDP](https://portal.cdp.coinbase.com/products/faucet) | loads, then **hangs on a spinner** — it needs an interactive sign-in to a Coinbase account |
+
+**So the practical requirement is a Coinbase/CDP account, or ≥0.001 ETH on Ethereum mainnet at the
+receiving address.** That is a real cost and it is stated here rather than discovered after an hour of
+clicking: the two documented "no account needed" faucets are the two that are gone, and every surviving
+one has an anti-bot gate.
+
+The deployer key for this attempt was generated with the project's own toolchain and kept outside every
+repository (`toolchain/TESTNET-KEY-README.md` explains where and why). It is a throwaway testnet key
+with nothing on any mainnet, which is exactly why the Alchemy route refuses it — the gate is doing its
+job, and the honest response is to say so rather than to look for a way around it.
 
 ## Step 1 — deploy the vault (needs the funded key)
 
