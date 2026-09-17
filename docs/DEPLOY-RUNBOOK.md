@@ -1,20 +1,47 @@
 # Public deployment runbook: vault on Base Sepolia, front end on Vercel
 
-> **STATUS: NOT RUN YET.** Nothing in this file has been executed against a testnet. It is the
-> procedure, written before the fact so that the one step that needs a funded key is the only step that
-> has to wait. Every value marked *measured* was checked from this machine on 2026-09-16; everything
-> else is *to be filled in when it runs*. When it has been run, this header gets replaced with what
-> actually happened — including anything that failed.
+> **STATUS: STEP 1 AND 2 ARE DONE. Step 4 is verified but not deployed; step 3 has no host yet.**
 >
-> **What HAS been retired, so it cannot bite later**: the Vercel configuration path in step 4. The
-> console needs `VAULT_DEPLOYMENT` because a host has no sibling `erc4626-vault` checkout, and that was
-> an assumption until it was tested. It was tested by building and running the console with the variable
-> pointing at a record **outside both repositories** (`next build` → exit 0, four routes, then
-> `next start` on port 3131): the page rendered and its own header named the file it had read
-> (`toolchain/_vault-record-standin.json`). The stand-in was a copy of the **Anvil** record, not a
-> testnet one — a record claiming a Base Sepolia address that does not exist would be a fabricated
-> address in the one file three programs treat as the source of truth. On Vercel the same variable will
-> point at `deployments/base-sepolia.json` inside this repository, and the mechanism is identical.
+> The vault is live on Base Sepolia:
+>
+> | | |
+> |---|---|
+> | vault | `0x7941438ee07bea4469ccd4bec583e9fb24037f35` |
+> | deploy tx | `0x91cf6315b578512db189f8429a0dc76f8131328e9a14e4b5dd522699b69c663d` |
+> | deploy block | 46,919,124 |
+> | owner / deployer | `0x2aE746C0ff0295c2da1aC338656F247e9758E034` |
+> | asset | Circle test USDC `0x036CbD53842c5426634e7929541eC2318f3dCF7e`, 6 decimals |
+> | actual cost | ~0.0000095 ETH (the fork rehearsal predicted 0.0000224; the estimate is the max fee) |
+>
+> All six chain checks pass against the live chain (`../erc4626-vault/scripts/check-deployment-record.mjs`):
+> chain id, bytecode at the address, `asset()`, `owner()`, `decimals()`, `symbol()`.
+>
+> **The vault is deployed and unfunded**: `totalAssets` and `totalSupply` are 0, and it has no events. That
+> is stated here rather than left to be discovered, and the deployment record says it too.
+>
+> **Step 4 was verified end to end without a host.** The console was built with the exact variables Vercel
+> will use — `VAULT_DEPLOYMENT=deployments/base-sepolia.json` (a copy inside this repository, because a
+> host has no sibling checkout), `VAULT_RPC=https://sepolia.base.org`, and **no index service** — and it
+> rendered:
+>
+> ```
+> vault    0x7941438ee07bea4469ccd4bec583e9fb24037f35
+> chain    Base Sepolia ( 84532 )
+> record   vault-console/deployments/base-sepolia.json
+> Now      Total assets 0 USDC · Total shares 0
+> Then     The index service could not be read. (names the URL and says it is a separate process)
+> ```
+>
+> So the `Now` panel reads the real deployed vault from the real chain, and the `Then` panel fails
+> honestly because nothing hosts the index. Putting this on Vercel is now a matter of the account, not of
+> the code.
+>
+> **What the real deployment found, which no local run could.** The indexer crashed on its first block
+> with `Cannot convert 0x to a BigInt`: a public node asked for the vault's totals *at the deployment
+> block* answers `result: "0x"`, because the contract is not in the state it serves for that height. Anvil
+> answers with a zero word, so every local run passed. Fixed and tested in `../erc4626-vault-dapp`
+> (`decodeUintResult`). Two further hazards came out of the same session and are recorded in step 2 and
+> step 3 below.
 
 ## What is being deployed, and why it is worth doing
 
@@ -143,6 +170,22 @@ nothing caught it; the first real deployment would have produced a record that `
 refuses — at the end of the process, after the gas was spent. Running the validator against that old
 format produces seven specific failures, including one that names the rename
 (`the record does not use "address" where the readers expect "vault"`).
+
+**A SECOND HAZARD, FOUND BY THE REAL DEPLOYMENT: the record is read by three programs, and all three
+must be given the SAME one.** The indexer, the API and the console each resolve it separately
+(`DEPLOYMENT_RECORD`, `VAULT_DEPLOYMENT`, and a module that reads the file directly), and getting one
+wrong does not produce an error — it produces a service that reports a different vault than the one it
+indexed. Measured: an API started with the right database and the wrong record answered
+`chainId: 31337` with the *local* vault address while serving a Base Sepolia index, and `/api/price`
+returned `503 share decimals are unknown` because it tried to read `decimals()` from an address with no
+code on that chain. It failed loudly, which is why it was a five-minute fix rather than a wrong chart.
+
+**And a third: the default database path is shared.** The indexer writes `data/vault.sqlite` unless
+`DATABASE_PATH` says otherwise, so a local run and a testnet run against the same file produce a
+database whose rows come from two chains — with a plausible row count and nothing in the schema
+recording which chain a row came from. `../../toolchain/check-index-single-chain.mjs` detects it by the
+one precise fact available: rows below the start block the indexer itself recorded. Index each chain
+into its own file (`DATABASE_PATH=data/vault-<chain>.sqlite`).
 
 ## Step 3 — index it
 
