@@ -29,6 +29,16 @@
 > project by construction, so this is not "it should have been run and was not", it is "there is no such
 > object here".
 > And the class of bug L3 exists to prevent (a revert reported as success) has real-wallet evidence in the sibling project.
+>
+> **Amendment, 2026-09-18: the L1 row's figure is a 2026-09-16 figure, and the file it points at now
+> holds more than it says.** The row carries no date of its own; the date this file gives that round of
+> work is **2026-09-16** (§1's "most recent real run" row, and §5's note that rows 1–8 were rewritten
+> that day). `docs/evidence/tests.txt` now holds **259 tests across 10 files, 10/10 files green** —
+> re-measured by running the command its own header names, `node tools/run-tests.mjs`, which is what
+> `npm test` runs. So the **107 tests, 5 files** in the row above is correct **as of its own date** and
+> is not the current count. The row is left as it stands, because it is the record of what was measured
+> then; this amendment is added beside it rather than substituted for it — the same treatment §5's
+> amendments give their own superseded text.
 
 ---
 
