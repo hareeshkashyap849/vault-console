@@ -13,7 +13,9 @@
 > | asset | Circle test USDC `0x036CbD53842c5426634e7929541eC2318f3dCF7e`, 6 decimals |
 > | actual cost | ~0.0000095 ETH (the fork rehearsal predicted 0.0000224; the estimate is the max fee) |
 >
-> All six chain checks pass against the live chain (`../erc4626-vault/scripts/check-deployment-record.mjs`):
+> All six chain checks pass against the live chain (the sibling repository's own checker,
+> `web3-development-execute/projects/erc4626-vault/scripts/check-deployment-record.mjs` — paths in this
+> runbook that start with `web3-development-execute/` are workspace paths, not paths in this repository):
 > chain id, bytecode at the address, `asset()`, `owner()`, `decimals()`, `symbol()`.
 >
 > **The vault is deployed and unfunded**: `totalAssets` and `totalSupply` are 0, and it has no events. That
@@ -83,7 +85,7 @@ clicking: the two documented "no account needed" faucets are the two that are go
 one has an anti-bot gate.
 
 The deployer key for this attempt was generated with the project's own toolchain and kept outside every
-repository (`toolchain/TESTNET-KEY-README.md` explains where and why). It is a throwaway testnet key
+repository (`web3-development-execute/toolchain/TESTNET-KEY-README.md` explains where and why). It is a throwaway testnet key
 with nothing on any mainnet, which is exactly why the Alchemy route refuses it — the gate is doing its
 job, and the honest response is to say so rather than to look for a way around it.
 
@@ -132,7 +134,8 @@ console output, because the console is easy to mistype and the JSON is what the 
 
 ## Step 2 — record it, once, in the file both readers use
 
-`deployments/base-sepolia.json` follows the shape of `deployments/local.json`, because three
+`deployments/base-sepolia.json` follows the shape of the sibling repository's
+`../../erc4626-vault/deployments/local.json`, because three
 programs read it: the indexer (for its start block), the console's server components (for the
 address), and `next.config.ts` at build time (for the chain id it hands to the browser).
 
@@ -183,7 +186,8 @@ code on that chain. It failed loudly, which is why it was a five-minute fix rath
 **And a third: the default database path is shared.** The indexer writes `data/vault.sqlite` unless
 `DATABASE_PATH` says otherwise, so a local run and a testnet run against the same file produce a
 database whose rows come from two chains — with a plausible row count and nothing in the schema
-recording which chain a row came from. `../../toolchain/check-index-single-chain.mjs` detects it by the
+recording which chain a row came from. `web3-development-execute/toolchain/check-index-single-chain.mjs`
+detects it by the
 one precise fact available: rows below the start block the indexer itself recorded. Index each chain
 into its own file (`DATABASE_PATH=data/vault-<chain>.sqlite`).
 
@@ -278,7 +282,7 @@ Recorded in the repository, not just in a chat message:
 - **No audit, no mainnet, no real funds.** A testnet deployment is evidence that the system runs
   publicly; it is not evidence that the contracts are safe to hold value.
 - **The wallet write path still needs a human.** MetaMask requires a person to click Approve, so the
-  four rows in `vault-console/BROWSER-TEST-PLAN.md` §5 stay `interaction not measured` even after
+  four rows in `../BROWSER-TEST-PLAN.md` §5 stay `interaction not measured` even after
   this is done — unless someone drives it by hand and records the hash.
 - **Free hosting sleeps.** A Render instance and a Vercel cold start both mean the first request
   after a quiet period is slow, which looks like a broken page to whoever opens it first.

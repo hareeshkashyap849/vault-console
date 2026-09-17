@@ -71,7 +71,7 @@ The **authoritative source** takes only three values: `chain` / `API` / `in-memo
 
 | State | Authoritative source (chain / API / in-memory declarative UI state) | Cacheable in a dApp? | Cache invalidation condition | Who is responsible for refresh | Refresh trigger (manual button / timer / event) |
 |---|---|---|---|---|---|
-| Vault address `vault` | **in-memory declarative UI state** (read from the deployment record file at startup, unchanged for the life of the process) | **Yes, and deliberately permanent** | Never invalidated. It comes from `deployments/local.json` and **only a redeploy changes it**, and a redeploy means restarting the console | `loadDeployment()` in `src/lib/deployment.ts`, **called on every request** in `page.tsx` (no module-level cache, see the note below) | Event (process lifetime: the file is re-read on every request) |
+| Vault address `vault` | **in-memory declarative UI state** (read from the deployment record file at startup, unchanged for the life of the process) | **Yes, and deliberately permanent** | Never invalidated. It comes from the deployment record file (`src/lib/deployment.ts`) and **only a redeploy changes it**, and a redeploy means restarting the console | `loadDeployment()` in `src/lib/deployment.ts`, **called on every request** in `page.tsx` (no module-level cache, see the note below) | Event (process lifetime: the file is re-read on every request) |
 | Asset address `asset` | Same as above | Same as above | Same as above | Same as above | Same as above |
 | `deployment.chainId` / `chainName` / `recordPath` | Same as above | Same as above | Same as above | Same as above | Same as above |
 | `totalAssets` | **chain** (`totalAssets()`, `src/lib/chain.ts`) | **No** | N/A (re-read on every request, no copy retained) | The caller of `readDeployment()` (`page.tsx`), **not** any component | Event (one `Promise.allSettled` per HTTP request) |
@@ -136,7 +136,10 @@ When the service is unavailable it shows `—` and notes "the index service is u
 - `10 ** decimals` (a precision constant in any form) — allowed only in `src/lib/format.ts` ✅ enforced by the checker
 - Amount arithmetic inside a component (`BigInt` division, `toFixed`, a `Number(...)` that takes part in an amount) ✅ enforced by the checker
 - **Hand-copied contract addresses, chainId, ABI** — an address/ABI may only come from the deployment output or from runtime configuration
-  - Addresses: `src/lib/deployment.ts` reads them from `deployments/local.json` (**no** hardcoded address)
+  - Addresses: `src/lib/deployment.ts` reads them from the **deployment record file** — `VAULT_DEPLOYMENT`
+    when it is set, otherwise the sibling repository's `../erc4626-vault/deployments/local.json` (**no**
+    hardcoded address). Both fallbacks point outside this repository, so a hosted build sets
+    `VAULT_DEPLOYMENT` to the in-repository copy `deployments/base-sepolia.json`
   - ABI: `VAULT_ABI` / `ERC20_ABI` in `src/lib/chain.ts` are **function signatures** written with `parseAbi([...])`,
     not the JSON from a compiler artifact. This is a deliberate choice: a function signature is an
     **interface contract** (human-readable, checkable against the text of the ERC-4626 standard), whereas an
