@@ -1,18 +1,25 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useReadContract, useSimulateContract, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
+import {
+  useConnection,
+  useReadContract,
+  useSimulateContract,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from 'wagmi';
 
 import { AmountField, DecisionNote, Panel, ScopeNote, TxStatus, WalletStateNotice } from '@/components/WalletPanels';
 import { ERC20_ABI, VAULT_ABI } from '@/lib/chain';
-import { decideDeposit, figure, maxAmountDecimal, type DepositDecision } from '@/lib/vaultActions';
+import { chainRefusalFor, decideDeposit, figure, maxAmountDecimal, type DepositDecision } from '@/lib/vaultActions';
+import { walletChainNow } from '@/lib/wagmi';
 import {
   describeWriteError,
   IDLE,
-  mapReceipt,
   mapWriteError,
   pendingState,
   shortMessageOf,
+  txStateFor,
   type TxState,
 } from '@/lib/txState';
 
@@ -87,6 +94,22 @@ export function DepositForm({
   const [approveTx, setApproveTx] = useState<TxState>(IDLE);
   const [depositTx, setDepositTx] = useState<TxState>(IDLE);
   const [promptError, setPromptError] = useState<{ message: string | null; detail: string | null } | null>(null);
+  /**
+   * The chain guard's answer at the moment a write was asked for. See `chainIsWrongNow`.
+   *
+   * It holds a SENTENCE rather than a boolean so the page can say which chain it is on and which it
+   * needs -- a refusal the reader cannot act on is the same defect as a red failure.
+   */
+  const [writeRefusal, setWriteRefusal] = useState<string | null>(null);
+  /** True while the wallet is being asked which chain it is on, so a second click cannot slip past. */
+  const [checkingChain, setCheckingChain] = useState(false);
+
+  /**
+   * THE CONNECTOR, WHICH IS HOW THIS FORM ASKS THE WALLET A QUESTION RATHER THAN ASSUMING AN ANSWER.
+   * The chain it is on is asked again immediately before every write -- see `walletChainNow` in
+   * `src/lib/wagmi.ts` for why the React value is not enough.
+   */
+  const { connector } = useConnection();
 
   // Belt and braces: a null decimals would otherwise format an amount with a made-up one. Every
   // control below is disabled until the chain has answered.
@@ -203,19 +226,65 @@ export function DepositForm({
   /**
    * The two transactions, folded into the states the panel renders.
    *
-   * The hash is added to the receipt object rather than passed beside it, so the mapping function
-   * takes ONE thing that describes a transaction. A three-argument version invited the two to
-   * disagree -- a hash from one transaction and a status from another is a state that never
-   * happened, and it would render as such.
+   * `txStateFor` IS THE WHOLE OF THIS, AND IT IS NOT A TERNARY HERE ON PURPOSE. The version this
+   * replaces read `phase === 'idle' ? IDLE : mapReceipt(step, { ...receipt, hash })`, so a write
+   * that the wallet had REFUSED -- no hash, no transaction -- was still fed to the receipt watch;
+   * a disabled receipt query reports "pending", and the published page therefore answered a click
+   * on Reject with "Approval sent. The wallet prompt is done; this waits for the chain to include
+   * it." The rule ("a receipt describes a transaction, so it may only move a write that has one")
+   * lives in `txState.ts`, where it can be tested without a wallet, a browser or a chain.
    */
-  const approveState = approveTx.phase === 'idle' ? IDLE : mapReceipt('approve', { ...approveReceipt, hash: approveTx.hash });
-  const depositState = depositTx.phase === 'idle' ? IDLE : mapReceipt('deposit', { ...depositReceipt, hash: depositTx.hash });
+  const approveState = txStateFor('approve', approveTx, approveReceipt);
+  const depositState = txStateFor('deposit', depositTx, depositReceipt);
 
   /** Any write in flight blocks both buttons: two prompts at once is not a state to allow. */
-  const busy = isWriting || approveState.phase === 'pending' || depositState.phase === 'pending';
+  const busy = isWriting || checkingChain || approveState.phase === 'pending' || depositState.phase === 'pending';
 
-  function handleApprove() {
+  /**
+   * THE CHAIN, CHECKED WHERE THE WRITE IS MADE RATHER THAN ONLY WHERE IT IS OFFERED.
+   *
+   * `decision` is computed for a render; a write is created by a click. When the wallet has moved to
+   * another chain the render already refuses (the form renders the wrong-chain notice and no
+   * control), and that is what the published page did NOT do -- it offered `1. Approve USDC` while
+   * the wallet was on Base mainnet, and the click put an `approve` in front of the wallet on a chain
+   * where this deployment does not exist (`0x2105` in the wallet's own error).
+   *
+   * A settled switch is caught by the render. A switch that has NOT settled is caught here, and the
+   * two are not the same case: React commits a re-render on its own schedule, and a click can be
+   * delivered in the same task as the wallet's `chainChanged` event, while the button that is about
+   * to be removed is still on screen. So the chain is asked of the wallet, not read from the tree.
+   *
+   * A refusal does NOT become a transaction state: nothing was sent, so there is no transaction to
+   * describe. It is the same sentence the decision produces, and it is rendered where the decision
+   * is rendered.
+   */
+  async function chainIsWrongNow(): Promise<boolean> {
+    if (connector === undefined) {
+      setWriteRefusal(chainRefusalFor(chainId, null));
+      return true;
+    }
+    setCheckingChain(true);
+    const liveChainId = await walletChainNow(connector);
+    setCheckingChain(false);
+    const refusal = chainRefusalFor(chainId, liveChainId);
+    setWriteRefusal(refusal);
+    return refusal !== null;
+  }
+
+  /**
+   * The refusal is cleared when the wallet is back on the deployment's chain.
+   *
+   * Without this the sentence would outlive the fact: the reader switches back to the right chain,
+   * the form re-renders, and a refusal from a moment ago would keep the buttons disabled and the
+   * page telling them to do what they have just done.
+   */
+  useEffect(() => {
+    if (walletChainId === chainId) setWriteRefusal(null);
+  }, [walletChainId, chainId]);
+
+  async function handleApprove() {
     if (depositAmount === null) return;
+    if (await chainIsWrongNow()) return;
     setPromptError(null);
     resetWrite();
     try {
@@ -244,13 +313,14 @@ export function DepositForm({
     }
   }
 
-  function handleDeposit() {
+  async function handleDeposit() {
     // `simulateContract` answers with `{ result, request }`: `result` is the decoded return value
     // and `request` is the fully-formed write. It is `request` that gets sent -- not `data`, which
     // is the query's wrapper around both, and not a second hand-built argument list, which is how
     // what was simulated and what is sent come to differ.
     const request = simulation.data?.request;
     if (request === undefined) return;
+    if (await chainIsWrongNow()) return;
     setPromptError(null);
     resetWrite();
     try {
@@ -350,8 +420,14 @@ export function DepositForm({
         </div>
 
         <DecisionNote
-          reason={decision.reason}
-          tone={decision.kind === 'deposit' || decision.kind === 'approve' || decision.kind === 'empty' ? 'neutral' : 'blocked'}
+          reason={writeRefusal ?? decision.reason}
+          tone={
+            writeRefusal !== null
+              ? 'blocked'
+              : decision.kind === 'deposit' || decision.kind === 'approve' || decision.kind === 'empty'
+                ? 'neutral'
+                : 'blocked'
+          }
         />
 
         <div className="flex flex-wrap items-center gap-3">
@@ -359,7 +435,7 @@ export function DepositForm({
             <button
               type="button"
               onClick={handleApprove}
-              disabled={busy}
+              disabled={busy || writeRefusal !== null}
               className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
             >
               {busy ? 'Waiting for the wallet…' : `1. Approve ${assetSymbol}`}
@@ -370,7 +446,7 @@ export function DepositForm({
             <button
               type="button"
               onClick={handleDeposit}
-              disabled={simulation.data?.request === undefined || busy}
+              disabled={simulation.data?.request === undefined || busy || writeRefusal !== null}
               className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
             >
               {busy ? 'Waiting for the wallet…' : 'Deposit'}
@@ -385,6 +461,7 @@ export function DepositForm({
                 setApproveTx(IDLE);
                 setDepositTx(IDLE);
                 setPromptError(null);
+                setWriteRefusal(null);
                 resetWrite();
               }}
               className="rounded-md border border-slate-700 px-3 py-2 text-xs text-slate-400"

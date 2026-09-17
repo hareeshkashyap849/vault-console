@@ -1,5 +1,5 @@
 import { defineChain, type Chain } from 'viem';
-import { createConfig, http, injected, type Config } from 'wagmi';
+import { createConfig, http, injected, type Config, type Connector } from 'wagmi';
 
 import type { RuntimeConfig } from '@/lib/runtimeConfig';
 
@@ -66,6 +66,45 @@ export function createWagmiConfig(config: RuntimeConfig): Config {
     // a wallet is connected, which React reports as a hydration mismatch.
     ssr: true,
   });
+}
+
+/**
+ * WHICH CHAIN THE WALLET IS ON **RIGHT NOW**, ASKED OF THE WALLET.
+ *
+ * WHY THIS IS NOT `useChainId()`
+ *
+ * `useChainId()` returns `config.state.chainId`, and `createConfig` deliberately pins that value to
+ * a chain from `config.chains`:
+ *
+ *     store.subscribe(({ connections, current }) => current ? connections.get(current)?.chainId : undefined,
+ *       (chainId) => {
+ *         // If chain is not configured, then don't switch over to it.
+ *         if (!chains.getState().some((x) => x.id === chainId)) return;   // <-- 8453 returns here
+ *         return store.setState((x) => ({ ...x, chainId }));
+ *       });
+ *     (node_modules/wagmi/node_modules/@wagmi/core/dist/esm/createConfig.js)
+ *
+ * This app configures ONE chain -- the deployment's -- so a wallet that moves to any other chain
+ * leaves `state.chainId` on the deployment's chain: the guard compared the app's chain with itself
+ * and could not observe the fact it exists to check. The connection's own `chainId` IS updated for
+ * such a chain (`change()` writes it into the connection), and this reads the wallet itself.
+ *
+ * WHY ASK THE WALLET AND NOT THE CONNECTION OBJECT
+ *
+ * The connection is a React value: it reaches a click handler through a render, and a click can be
+ * delivered in the same task as the wallet's `chainChanged` event -- before React has committed the
+ * re-render that would have removed the button. The wallet's own `eth_chainId` has no such lag, and
+ * it costs one request that prompts for nothing.
+ *
+ * `null` MEANS "NOT READ", NEVER "MATCHES": a wallet that cannot answer has not been shown to be on
+ * the deployment's chain.
+ */
+export async function walletChainNow(connector: Connector): Promise<number | null> {
+  try {
+    return await connector.getChainId();
+  } catch {
+    return null;
+  }
 }
 
 /**

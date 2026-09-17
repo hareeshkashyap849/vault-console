@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  useChainId,
   useConfig,
   useConnect,
   useConnection,
@@ -46,12 +45,30 @@ import { addChainParameterFor } from '@/lib/wagmi';
  *
  * TWO CHAIN IDS, AND THEY ARE DIFFERENT FACTS
  *
- * `useChainId()` is the chain the wallet is actually on, and it is the one the pre-flight check
- * uses: deciding "is this wallet on the right chain" from the app's own chain would answer
- * `true` always, and the check would never fire. The id in the `chainId` prop is that other fact:
- * the deployment's own chain, which the page above reads from `api/config` through
- * `useRuntimeConfig()`. The page shows both, because "you are on chain 1" is only actionable
- * beside "this app is on chain 31337".
+ * The id in the `chainId` prop is the deployment's own chain, which the page above reads from
+ * `api/config` through `useRuntimeConfig()`. The other fact is the chain the WALLET is on, and it
+ * comes from the CONNECTION -- `useConnection().chainId` -- not from `useChainId()`.
+ *
+ * THAT IS THE FIX FOR A MEASURED DEFECT, AND THE LINE IT REPLACES IS WORTH NAMING. This component
+ * used `useChainId()` for the wallet's chain, with a comment asserting it "is the chain the wallet
+ * is actually on". It is not. `useChainId()` returns `config.state.chainId`, and `createConfig` only
+ * copies a connection's chain into it when that chain is one of `config.chains`:
+ *
+ *     // If chain is not configured, then don't switch over to it.
+ *     if (!chains.getState().some((x) => x.id === chainId)) return;
+ *
+ * This app configures ONE chain, so a wallet on any other chain left `state.chainId` equal to the
+ * deployment's chain -- and `decideDeposit`'s wrong-chain branch, whose whole input is that value,
+ * compared the app's chain with itself and could never fire. Measured on the published console with
+ * a wallet reporting chain `0x2105` (Base mainnet, 8453): the page read "Wallet chain 84532" beside
+ * "matches the deployment", offered `1. Approve USDC`, and the click put an `approve` in front of
+ * the wallet on a chain this deployment does not exist on. The failure that came back was the
+ * chain's, not this app's: `gas required exceeds allowance (0)` from `0x2105`.
+ *
+ * The connection's `chainId` IS updated for an unconfigured chain -- the connector's `chainChanged`
+ * listener writes it into the connection -- so it is the value the guard was always meant to read.
+ * The chain is asked of the WALLET again immediately before every write (`src/lib/wagmi.ts`,
+ * `walletChainNow`), because a chain switch can land between a render and a click.
  *
  * THE WAGMI v3 SHAPE, WHICH IS NOT THE v2 SHAPE THE SKILL LIBRARY DOCUMENTS
  *
@@ -106,8 +123,10 @@ export function VaultManager({
   const { mutate: switchConnection } = useSwitchConnection();
   const { mutate: switchChain, isPending: isSwitching } = useSwitchChain();
 
-  // The wallet's chain. See the header: this is what the pre-flight check reads.
-  const walletChainId = useChainId();
+  // The wallet's chain, from the CONNECTION. See the header: this is the value the pre-flight check
+  // reads, and `useChainId()` is not it -- that one is the app's chain and cannot see a wallet on a
+  // chain this app has no deployment for.
+  const walletChainId = connection.chainId ?? null;
   const account = connection.isConnected ? connection.address : undefined;
   const isWrongChain = account !== undefined && walletChainId !== chainId;
 

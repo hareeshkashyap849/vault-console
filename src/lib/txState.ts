@@ -305,6 +305,50 @@ export function mapReceipt(step: TxStep, receipt: ReceiptLike): TxState {
   return pendingState(step, hash);
 }
 
+/**
+ * WHAT TO RENDER FOR A WRITE: the state it is in LOCALLY, or the receipt, once there is one.
+ *
+ * WHY THIS FUNCTION EXISTS, AND WHAT ITS ABSENCE PRINTED
+ *
+ * The component has two facts about a write -- what the wallet said (`onSuccess` gave a hash,
+ * `onError` threw) and what `useWaitForTransactionReceipt` reports -- and folding them together was
+ * done inline, as `mapReceipt(step, { ...receipt, hash: local.hash })` for every local state that
+ * was not `idle`. That fold is wrong for exactly one phase, and it is the phase this module exists
+ * for:
+ *
+ *   `useWaitForTransactionReceipt({ hash: undefined })` is a DISABLED query. TanStack reports its
+ *   status as `'pending'`, which means "this query has not run", NOT "a transaction is in flight".
+ *   So a REJECTED write -- no hash, no transaction, nothing signed -- was fed to `mapReceipt`, which
+ *   answered `pendingState`, and the page rendered, verbatim, on the published console:
+ *
+ *     Waiting for the chain(approve)
+ *     Approval sent. The wallet prompt is done; this waits for the chain to include it.
+ *
+ *   after the reader had clicked Reject. The allowance was `0` and the nonce had not moved, so the
+ *   page was reporting a transaction that did not exist and would never exist, and the deposit
+ *   button stayed disabled ("Waiting for the wallet…") because `busy` reads the phase. Two of the
+ *   five phases are invisible from the receipt -- `rejected` and `failed` -- and both were being
+ *   overwritten by it.
+ *
+ * THE RULE, STATED ONCE, HERE
+ *
+ *   A receipt describes a transaction, so it may only move a write that HAS one: a hash the wallet
+ *   returned, which is the `pending` phase. Every other phase is a statement about a write with no
+ *   transaction behind it (idle, rejected, failed-before-sending) or about an outcome this app
+ *   already knows, and it is returned unchanged.
+ *
+ * `null` IS NOT A HASH. `pendingState` accepts `hash: null` -- a wallet that returns no hash still
+ * has a prompt outstanding -- so the hash itself is checked rather than assumed from the phase, and
+ * a hashless `pending` is left as the local state says.
+ *
+ * The hash is taken from the LOCAL state, not from the receipt object, so the receipt cannot
+ * describe a different transaction than the one the wallet returned.
+ */
+export function txStateFor(step: TxStep, local: TxState, receipt: ReceiptLike): TxState {
+  if (local.phase !== 'pending' || local.hash === null) return local;
+  return mapReceipt(step, { ...receipt, hash: local.hash });
+}
+
 /** A reader-facing sentence about a write that failed before any transaction existed. */
 export interface WriteErrorText {
   /** The line to show. `null` means a rejection, where the phase already says everything. */

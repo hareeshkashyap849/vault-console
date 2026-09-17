@@ -1,18 +1,25 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useReadContract, useSimulateContract, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
+import {
+  useConnection,
+  useReadContract,
+  useSimulateContract,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from 'wagmi';
 
 import { AmountField, DecisionNote, Panel, ScopeNote, TxStatus, WalletStateNotice } from '@/components/WalletPanels';
 import { VAULT_ABI } from '@/lib/chain';
-import { decideRedeem, figure, maxAmountDecimal, type RedeemDecision } from '@/lib/vaultActions';
+import { chainRefusalFor, decideRedeem, figure, maxAmountDecimal, type RedeemDecision } from '@/lib/vaultActions';
+import { walletChainNow } from '@/lib/wagmi';
 import {
   describeWriteError,
   IDLE,
-  mapReceipt,
   mapWriteError,
   pendingState,
   shortMessageOf,
+  txStateFor,
   type TxState,
 } from '@/lib/txState';
 
@@ -72,6 +79,11 @@ export function RedeemForm({
   const [input, setInput] = useState('');
   const [tx, setTx] = useState<TxState>(IDLE);
   const [promptError, setPromptError] = useState<{ message: string | null; detail: string | null } | null>(null);
+  /** The chain guard's answer at the moment a write was asked for. See `chainIsWrongNow`. */
+  const [writeRefusal, setWriteRefusal] = useState<string | null>(null);
+  /** True while the wallet is being asked which chain it is on, so a second click cannot slip past. */
+  const [checkingChain, setCheckingChain] = useState(false);
+  const { connector } = useConnection();
 
   const shares = shareDecimals ?? 0;
   const sharesKnown = shareDecimals !== null;
@@ -170,17 +182,46 @@ export function RedeemForm({
     void refetchMaxWithdraw();
   }, [receiptStatus, refetchShares, refetchMaxWithdraw]);
 
-  // The hash goes INTO the receipt object, so the mapping function takes one description of one
-  // transaction rather than a hash that could belong to a different one.
-  const state = tx.phase === 'idle' ? IDLE : mapReceipt('redeem', { ...receipt, hash: tx.hash });
-  const busy = isWriting || state.phase === 'pending';
+  // The fold lives in `txState.ts`: a receipt describes a transaction, so it may only move a write
+  // that HAS one. The inline version this replaces fed a refused write -- no hash, no transaction --
+  // to a disabled receipt query, which answers "pending", so the page reported an approval that had
+  // been rejected in the wallet as on its way to the chain. The same fold is used here for the same
+  // reason rather than re-derived: this path shares `mapWriteError` and the five phases with the
+  // deposit form, and it shared the defect too.
+  const state = txStateFor('redeem', tx, receipt);
+  const busy = isWriting || checkingChain || state.phase === 'pending';
   const assetsPreview = previewRead.data === undefined ? null : previewRead.data;
 
-  function handleRedeem() {
+  /**
+   * The chain, asked of the wallet at the moment the write is made. See the long note in
+   * `DepositForm.chainIsWrongNow` -- the reasoning is one argument about one defect, and the redeem
+   * path is exposed to it identically (the render refuses a settled switch; this catches the one
+   * that has not settled).
+   */
+  async function chainIsWrongNow(): Promise<boolean> {
+    if (connector === undefined) {
+      setWriteRefusal(chainRefusalFor(chainId, null));
+      return true;
+    }
+    setCheckingChain(true);
+    const liveChainId = await walletChainNow(connector);
+    setCheckingChain(false);
+    const refusal = chainRefusalFor(chainId, liveChainId);
+    setWriteRefusal(refusal);
+    return refusal !== null;
+  }
+
+  /** Cleared when the wallet is back on the deployment's chain, so the sentence outlives no fact. */
+  useEffect(() => {
+    if (walletChainId === chainId) setWriteRefusal(null);
+  }, [walletChainId, chainId]);
+
+  async function handleRedeem() {
     // `simulateContract` answers with `{ result, request }`. It is `request` that is sent, so what
     // was checked is what goes to the wallet.
     const request = simulation.data?.request;
     if (request === undefined) return;
+    if (await chainIsWrongNow()) return;
     setPromptError(null);
     resetWrite();
     try {
@@ -263,8 +304,14 @@ export function RedeemForm({
         </div>
 
         <DecisionNote
-          reason={decision.reason}
-          tone={decision.kind === 'redeem' || decision.kind === 'empty' ? 'neutral' : 'blocked'}
+          reason={writeRefusal ?? decision.reason}
+          tone={
+            writeRefusal !== null
+              ? 'blocked'
+              : decision.kind === 'redeem' || decision.kind === 'empty'
+                ? 'neutral'
+                : 'blocked'
+          }
         />
 
         <div className="flex flex-wrap items-center gap-3">
@@ -272,7 +319,7 @@ export function RedeemForm({
             <button
               type="button"
               onClick={handleRedeem}
-              disabled={simulation.data?.request === undefined || busy}
+              disabled={simulation.data?.request === undefined || busy || writeRefusal !== null}
               className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
             >
               {busy ? 'Waiting for the wallet…' : 'Redeem'}
@@ -285,6 +332,7 @@ export function RedeemForm({
                 setInput('');
                 setTx(IDLE);
                 setPromptError(null);
+                setWriteRefusal(null);
                 resetWrite();
               }}
               className="rounded-md border border-slate-700 px-3 py-2 text-xs text-slate-400"

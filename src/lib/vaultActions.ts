@@ -135,6 +135,57 @@ export function maxAmountDecimal(baseUnits: bigint | string, decimals: number): 
 export type ActionStep = 'deposit' | 'approve' | 'redeem';
 
 /**
+ * THE WRONG-CHAIN SENTENCE, IN ONE PLACE, BECAUSE IT IS THE ONLY THING THAT STOPS A SEND.
+ *
+ * Both forms refuse on the same fact and must say the same thing about it, and the sentence is
+ * asserted in the browser against the published page. Two copies of it would be two chances for
+ * one of them to name the wrong chain -- and a reader who is told the wrong number switches to a
+ * chain where the deployment is not either.
+ *
+ * WHY IT TAKES THE WALLET'S CHAIN AS AN ARGUMENT RATHER THAN READING IT
+ *
+ * Because this module may not know how to read one: it has no React, no viem and no provider. The
+ * CALLER's job is to hand it the chain the WALLET is actually on, and that is the part that was
+ * got wrong -- see `VaultManager`: the value it passed came from `useChainId()`, which is the
+ * APP's chain and is deliberately NOT updated when the wallet moves to a chain outside
+ * `config.chains`. The guard therefore compared the app's chain with itself, said "matches the
+ * deployment" while the wallet was on Base mainnet, and offered an `approve` on a chain this
+ * deployment does not exist on.
+ */
+export function wrongChainReason(chainId: number, walletChainId: number): string {
+  return (
+    `Switch the wallet to chain ${chainId} -- it is currently on chain ${walletChainId}, where this ` +
+    'deployment does not exist. Nothing is sent until it does.'
+  );
+}
+
+/**
+ * Whether a write may be attempted at all, at the moment somebody asks for it.
+ *
+ * `null` means the write may proceed. Anything else is the sentence to show instead -- and it is
+ * the SAME sentence `decideDeposit` / `decideRedeem` produce, because it is the same fact.
+ *
+ * WHY A SECOND ENTRY POINT IS NOT A SECOND DECISION
+ *
+ * Those two functions answer "what is offered next"; this one answers "may this write leave the
+ * browser at all". They are asked at different moments, and the difference is what a chain switch
+ * between them costs: the render that drew the button and the click that uses it are different
+ * instants, and only the second one creates a transaction. A `null` wallet chain is the
+ * no-wallet case -- the callers pass `null` exactly when no address is connected -- and it is
+ * refused as well, because "no chain read" is not "matching".
+ */
+export function chainRefusalFor(chainId: number, walletChainId: number | null): string | null {
+  if (walletChainId === null) {
+    return (
+      'The chain the wallet is on has not been read, so nothing is sent. This app does not ask a ' +
+      'wallet to sign for a chain it has not seen it on.'
+    );
+  }
+  if (walletChainId === chainId) return null;
+  return wrongChainReason(chainId, walletChainId);
+}
+
+/**
  * What the deposit form offers the user, and the sentence explaining it.
  *
  * `reason` is written to be shown as-is, so it carries the figures rather than referring to
@@ -204,12 +255,7 @@ export function decideDeposit(inputs: DepositInputs): DepositDecision {
   }
 
   if (walletChainId !== chainId) {
-    return {
-      kind: 'wrong-chain',
-      reason:
-        `Switch the wallet to chain ${chainId} -- it is currently on chain ${walletChainId}, where this ` +
-        'deployment does not exist. Nothing is sent until it does.',
-    };
+    return { kind: 'wrong-chain', reason: wrongChainReason(chainId, walletChainId) };
   }
 
   if (input.trim() === '') {
@@ -293,12 +339,7 @@ export function decideRedeem(inputs: RedeemInputs): RedeemDecision {
   }
 
   if (walletChainId !== chainId) {
-    return {
-      kind: 'wrong-chain',
-      reason:
-        `Switch the wallet to chain ${chainId} -- it is currently on chain ${walletChainId}, where this ` +
-        'deployment does not exist. Nothing is sent until it does.',
-    };
+    return { kind: 'wrong-chain', reason: wrongChainReason(chainId, walletChainId) };
   }
 
   if (input.trim() === '') {
