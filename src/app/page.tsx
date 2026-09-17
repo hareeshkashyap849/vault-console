@@ -118,8 +118,9 @@ export default function LandingPage() {
           </p>
           <p>
             <strong>Write.</strong> The manage page connects a browser wallet, shows your position,
-            and offers a deposit and a redemption. Two write paths, on the local Anvil chain this
-            deployment record describes.
+            and offers a deposit and a redemption. Two write paths, on the chain this deployment
+            record describes: <span className="figure text-slate-200">{runtime.chainName}</span> (
+            {runtime.chainId}).
           </p>
           <p className="text-xs text-slate-500">
             A deposit is one or two transactions depending on the allowance the chain currently
