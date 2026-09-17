@@ -16,6 +16,16 @@
  * These call the real `readDeployment` with a transport pointed at a closed port, so the
  * error under test is one viem actually produced rather than one constructed to match my
  * assumption about its shape. That assumption was wrong once already.
+ *
+ * THE ENDPOINT IS PASSED IN, AND THE TESTS GOT SHORTER BECAUSE OF IT
+ *
+ * They used to set `process.env.VAULT_RPC` and restore it in a `finally`, because the endpoint
+ * came from the environment at call time. It is an argument now -- the browser has no
+ * request-time environment, see `src/lib/chain.ts` -- so each test states the endpoint it means
+ * and there is no global to restore. One test's assertion also became honest: it used to check
+ * that the message contains a port that `rpcUrl()` would NOT return, except `rpcUrl()` had
+ * already been restored to the default by the time the assertion ran, so the comparison could
+ * not fail. With the value in hand, the check is just `assert.equal`.
  */
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
@@ -33,58 +43,34 @@ const config = {
 
 describe('chain read failures become sentences, not dumps', () => {
   it('a dead endpoint produces a ChainError naming the endpoint', async () => {
-    const previous = process.env.VAULT_RPC;
-    process.env.VAULT_RPC = DEAD;
-    try {
-      const err = await readDeployment(config).then(
-        () => null,
-        (e: unknown) => e,
-      );
-      assert.ok(err instanceof ChainError, `expected a ChainError, got ${String(err)}`);
-      assert.equal(err.kind, 'unreachable');
-      assert.equal(err.rpcUrl, DEAD);
-      assert.match(err.message, /is not reachable/);
-      assert.match(err.message, new RegExp(DEAD.replace(/[.:/]/g, '\\$&')));
-      // THE ASSERTION THAT WOULD HAVE CAUGHT THE SCREENFUL OF JSON: the reader-facing
-      // message must NOT be viem's diagnostic dump.
-      assert.ok(!/Raw Call Arguments/.test(err.message), 'the message must not be the viem dump');
-      assert.ok(!/viem@/.test(err.message), 'the message must not contain a version banner');
-      assert.ok(err.message.length < 300, `the message is ${err.message.length} chars; it should be a sentence`);
-      // ...and the dump must still be available, just somewhere else.
-      assert.ok(err.detail.length > err.message.length, 'the technical detail must be preserved');
-    } finally {
-      if (previous === undefined) delete process.env.VAULT_RPC;
-      else process.env.VAULT_RPC = previous;
-    }
+    const err = await readDeployment(config, DEAD).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    assert.ok(err instanceof ChainError, `expected a ChainError, got ${String(err)}`);
+    assert.equal(err.kind, 'unreachable');
+    assert.equal(err.rpcUrl, DEAD);
+    assert.match(err.message, /is not reachable/);
+    assert.match(err.message, new RegExp(DEAD.replace(/[.:/]/g, '\\$&')));
+    // THE ASSERTION THAT WOULD HAVE CAUGHT THE SCREENFUL OF JSON: the reader-facing
+    // message must NOT be viem's diagnostic dump.
+    assert.ok(!/Raw Call Arguments/.test(err.message), 'the message must not be the viem dump');
+    assert.ok(!/viem@/.test(err.message), 'the message must not contain a version banner');
+    assert.ok(err.message.length < 300, `the message is ${err.message.length} chars; it should be a sentence`);
+    // ...and the dump must still be available, just somewhere else.
+    assert.ok(err.detail.length > err.message.length, 'the technical detail must be preserved');
   });
 
   it('names the transport error as the root cause, which is the actionable part', async () => {
-    const previous = process.env.VAULT_RPC;
-    process.env.VAULT_RPC = DEAD;
-    try {
-      const err = (await readDeployment(config).catch((e: unknown) => e)) as ChainError;
-      assert.match(err.detail, /fetch failed|ECONNREFUSED/i, 'the root cause must be searchable in the detail');
-    } finally {
-      if (previous === undefined) delete process.env.VAULT_RPC;
-      else process.env.VAULT_RPC = previous;
-    }
+    const err = (await readDeployment(config, DEAD).catch((e: unknown) => e)) as ChainError;
+    assert.match(err.detail, /fetch failed|ECONNREFUSED/i, 'the root cause must be searchable in the detail');
   });
 
   it('the endpoint quoted is the one actually used, not a default', async () => {
-    const previous = process.env.VAULT_RPC;
-    process.env.VAULT_RPC = 'http://127.0.0.1:18999';
-    try {
-      const err = (await readDeployment(config).catch((e: unknown) => e)) as ChainError;
-      assert.equal(err.rpcUrl, 'http://127.0.0.1:18999');
-      // Quoting the wrong endpoint sends a reader to check a service that is fine. The first
-      // version of this test asserted the message does NOT contain `rpcUrl()` -- but `rpcUrl()`
-      // is read at call time from an environment this `finally` has already restored, so it
-      // returned the DEFAULT and the comparison was guaranteed to pass. An assertion that
-      // cannot fail is worse than no assertion: it reads as coverage.
-      assert.ok(err.message.includes('18999'), 'the message must quote the endpoint that was used');
-    } finally {
-      if (previous === undefined) delete process.env.VAULT_RPC;
-      else process.env.VAULT_RPC = previous;
-    }
+    const endpoint = 'http://127.0.0.1:18999';
+    const err = (await readDeployment(config, endpoint).catch((e: unknown) => e)) as ChainError;
+    assert.equal(err.rpcUrl, endpoint);
+    // Quoting the wrong endpoint sends a reader to check a service that is fine.
+    assert.ok(err.message.includes('18999'), 'the message must quote the endpoint that was used');
   });
 });

@@ -1,6 +1,8 @@
+'use client';
+
 import Link from 'next/link';
 
-import { loadDeployment } from '@/lib/deployment';
+import { useRuntimeConfig } from '@/app/providers';
 
 /**
  * The landing page.
@@ -15,16 +17,15 @@ import { loadDeployment } from '@/lib/deployment';
  * also what lets its 14 browser assertions keep asserting exactly the console.
  *
  * The rule the rest of this repository holds to applies here too: every figure shown is read,
- * never asserted. The chain id, the name and the addresses below come from
- * `deployments/local.json` -- the same file the deploy script writes and the indexer reads -- and
- * the page says which file it read, so a reader can tell which deployment they are looking at.
- * Nothing on this page is a constant in the source.
+ * never asserted. The chain id, the name and the addresses below come from the deployment record
+ * -- the same file the deploy script writes and the indexer reads -- through the generated runtime
+ * config, and the page names the record it came from, so a reader can tell which deployment they
+ * are looking at. Nothing on this page is a constant in the source.
+ *
+ * It is a client component now, like the rest of the app: the published console is a static export
+ * and the addresses arrive at load time rather than at request time. Nothing here needs the chain,
+ * so the page renders as soon as the config is read.
  */
-
-// Read at request time, for the same reason the console does it: a copy held by the build is a
-// copy that goes stale on the next deploy, and a stale address is displayed as fact.
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
 function Card({ title, href, children }: { title: string; href: string | null; children: React.ReactNode }) {
   return (
@@ -42,23 +43,18 @@ function Card({ title, href, children }: { title: string; href: string | null; c
   );
 }
 
-export default async function LandingPage() {
+export default function LandingPage() {
   /**
-   * A missing deployment record must not become a 500 on the front page.
+   * The deployment identity, from the runtime config.
    *
-   * `loadDeployment()` throws with a long, specific message naming every path it tried, because
-   * that message IS the fix. On the console that message is rendered inside the panel it breaks;
-   * here it is the whole page, because without a record there is nothing true to say about the
-   * vault -- and a landing page that guessed an address would be worse than one that says why it
-   * cannot.
+   * This page used to read the deployment record itself, in a `try`/`catch`, and render the
+   * loader's message when there was none. Every page did that, in its own way, which meant every
+   * page had its own idea of what "no record" looks like. There is now ONE place: `Providers`
+   * fetches `api/config` before any page renders, and shows that message instead of the app. So
+   * this page can state the addresses it was given and nothing else -- and there is no dead
+   * branch here that looks like a live fallback.
    */
-  let deployment: ReturnType<typeof loadDeployment> | null = null;
-  let deploymentError: string | null = null;
-  try {
-    deployment = loadDeployment();
-  } catch (cause) {
-    deploymentError = cause instanceof Error ? cause.message : String(cause);
-  }
+  const runtime = useRuntimeConfig();
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -133,47 +129,42 @@ export default async function LandingPage() {
         </Card>
 
         <Card title="Which deployment this is" href={null}>
-          {deployment === null ? (
-            <div className="rounded-md border border-amber-800/60 bg-amber-950/30 p-4 text-sm text-amber-200">
-              <p className="font-medium">No deployment record could be read.</p>
-              <p className="mt-1 whitespace-pre-wrap text-amber-200/80">{deploymentError}</p>
+          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs text-slate-500">chain</dt>
+              <dd className="figure text-slate-200">
+                {runtime.chainName} ({runtime.chainId})
+              </dd>
             </div>
-          ) : (
-            <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-slate-500">chain</dt>
-                <dd className="figure text-slate-200">
-                  {deployment.chainName} ({deployment.chainId})
-                </dd>
+            <div>
+              <dt className="text-xs text-slate-500">record</dt>
+              <dd className="figure text-slate-400">
+                {runtime.recordPath.split(/[\\/]/).slice(-3).join('/')}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">vault</dt>
+              <dd className="figure text-slate-400">{runtime.vault}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">asset</dt>
+              <dd className="figure text-slate-400">{runtime.asset}</dd>
+            </div>
+            {runtime.note ? (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-slate-500">the record&apos;s own note</dt>
+                <dd className="text-xs text-slate-400">{runtime.note}</dd>
               </div>
-              <div>
-                <dt className="text-xs text-slate-500">record</dt>
-                <dd className="figure text-slate-400">
-                  {deployment.recordPath.split(/[\\/]/).slice(-3).join('/')}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-slate-500">vault</dt>
-                <dd className="figure text-slate-400">{deployment.vault}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-slate-500">asset</dt>
-                <dd className="figure text-slate-400">{deployment.asset}</dd>
-              </div>
-              {deployment.note ? (
-                <div className="sm:col-span-2">
-                  <dt className="text-xs text-slate-500">the record&apos;s own note</dt>
-                  <dd className="text-xs text-slate-400">{deployment.note}</dd>
-                </div>
-              ) : null}
-            </dl>
-          )}
+            ) : null}
+          </dl>
         </Card>
 
         <footer className="border-t border-slate-800 pt-4 text-xs text-slate-500">
-          The addresses above are read from the deployment record at request time, not copied into
-          the source. Base Sepolia is configured as a second chain so the app is not local-only; the
-          vault is deployed on the local chain, and nothing here claims otherwise.
+          The addresses above are generated from the deployment record by{' '}
+          <span className="figure">scripts/build-runtime-config.mjs</span> and read by this page at
+          load time; none of them is written into the source. One chain is configured -- the one the
+          record names -- because this console reads one deployment, and a second chain in the wallet
+          configuration would only offer to connect where the vault does not exist.
         </footer>
       </div>
     </main>

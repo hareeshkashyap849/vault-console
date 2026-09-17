@@ -1,10 +1,15 @@
-import { indexApi } from '@/lib/api';
-import { loadDeployment, chainConfig } from '@/lib/deployment';
-import { readDeployment } from '@/lib/chain';
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+
 import { PriceChart } from '@/components/PriceChart';
 import { Failure, Figure, Panel } from '@/components/Panels';
+import { useRuntimeConfig } from '@/app/providers';
+import { createIndexApi } from '@/lib/api';
+import { readDeployment, type ChainConfig } from '@/lib/chain';
 import { displayBaseUnits, displayDecimal, duration, timeLabel } from '@/lib/format';
-import type { Candle, Status } from '@/lib/types';
+import { describeServiceFailure } from '@/lib/serviceFailure';
 
 /**
  * The console, at `/vault`.
@@ -15,7 +20,20 @@ import type { Candle, Status } from '@/lib/types';
  * moved because the app now has somewhere to land -- `/` says what this is and points at the two
  * tools -- and because a console is what `/vault` names and `/` does not.
  *
- * Both sources are fetched here, on the server, and BOTH ARE ALLOWED TO FAIL INDEPENDENTLY.
+ * WHERE THE READS HAPPEN NOW, AND WHY THAT IS NOT A DETAIL
+ *
+ * This was a server component: it read both sources on the server, per request, with
+ * `dynamic = 'force-dynamic'` and `cache: 'no-store'`. It is now a client component, because the
+ * published console is a static export and a static host runs no server to do that on. The
+ * guarantee is kept by other means, not dropped:
+ *
+ *   * `staleTime: 0` on every query, which is the same decision `no-store` made, expressed where
+ *     the reads now happen. A figure on screen was read for the render that shows it.
+ *   * The endpoint comes from the runtime config, so the browser cannot fall back to a default
+ *     pointing at the reader's own machine -- which is what `process.env.VAULT_RPC` would do in a
+ *     bundle, silently.
+ *
+ * Both sources are still fetched INDEPENDENTLY and BOTH ARE STILL ALLOWED TO FAIL SEPARATELY.
  *
  * That independence is the point of the page. The chain and the index are separate
  * systems with separate failure modes:
@@ -26,7 +44,7 @@ import type { Candle, Status } from '@/lib/types';
  *
  * A page that required both would be down whenever either was, and a page that silently
  * fell back to one would label stale data as live. So each panel carries its own source
- * and its own error.
+ * and its own error. Four queries, four errors, no shared fate.
  *
  * THE TWO AMOUNT FORMATS, WHICH THE PAGE HAS TO KEEP STRAIGHT
  *
@@ -43,39 +61,32 @@ import type { Candle, Status } from '@/lib/types';
  * never show. It looked plausible for `totalAssets` only because a 6-decimal asset makes
  * `934924100` read as an ordinary number. The two formatters now have different names so
  * that the choice is visible at every call site.
- */
-
-// The page must reflect the chain and the index as they are at request time. Caching is
-// opted out explicitly: Next caches `fetch` by default, and a cached console is a console
-// showing figures that were true a moment ago while claiming to be current.
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-/**
- * `Panel`, `Figure` and `Failure` now live in `src/components/Panels.tsx`.
  *
- * They were defined here while this was the whole app. The second and third pages made that
- * a copy waiting to happen, and the two that matter most cannot survive a copy: `Panel`'s
- * `source` label is how a reader checks this app's central claim ("every figure says which
- * source it came from"), and `Failure`'s three rules were each learned from this page's own
- * output. Extracted rather than duplicated, and the `source` prop is required so a page
- * cannot render a panel without stating one.
+ * `Panel`, `Figure` and `Failure` live in `src/components/Panels.tsx`. They were defined here
+ * while this was the whole app; the second and third pages made that a copy waiting to happen, and
+ * the two that matter most cannot survive a copy: `Panel`'s `source` label is how a reader checks
+ * this app's central claim, and `Failure`'s three rules were each learned from this page's own
+ * output. The `source` prop is required so a page cannot render a panel without stating one.
  */
+export default function Page() {
+  const runtime = useRuntimeConfig();
 
-export default async function Page() {
-  const deployment = loadDeployment();
+  const chain: ChainConfig = useMemo(
+    () => ({ chainId: runtime.chainId, vault: runtime.vault, asset: runtime.asset }),
+    [runtime.chainId, runtime.vault, runtime.asset],
+  );
+  const api = useMemo(() => createIndexApi(runtime), [runtime]);
 
-  // Independent: neither await can prevent the other panel from rendering.
-  const [liveResult, statusResult, candleResult, priceResult] = await Promise.allSettled([
-    readDeployment(chainConfig(deployment)),
-    indexApi.status(),
-    indexApi.candles(60, 5000),
-    indexApi.price(1),
-  ]);
+  // Four independent queries. Each one's failure is rendered by its own panel and cannot
+  // suppress another.
+  const live = useQuery({ queryKey: ['live', runtime.vault, runtime.rpcUrl], queryFn: () => readDeployment(chain, runtime.rpcUrl) });
+  const status = useQuery({ queryKey: ['status', runtime.indexApiUrl], queryFn: () => api.status() });
+  const candles = useQuery({ queryKey: ['candles', 60, runtime.indexApiUrl], queryFn: () => api.candles(60, 5000) });
+  const priceSeries = useQuery({ queryKey: ['price', 1, runtime.indexApiUrl], queryFn: () => api.price(1) });
 
-  const live = liveResult.status === 'fulfilled' ? liveResult.value : null;
-  const status: Status | null = statusResult.status === 'fulfilled' ? statusResult.value : null;
-  const candles: Candle[] = candleResult.status === 'fulfilled' ? candleResult.value.candles : [];
+  const liveData = live.data ?? null;
+  const statusData = status.data ?? null;
+  const candlesData = candles.data?.candles ?? [];
 
   /**
    * The share price comes from the SERVICE, not from arithmetic here.
@@ -90,11 +101,11 @@ export default async function Page() {
    * When the service is unavailable there is no price to show, and the panel says so
    * rather than computing one that could disagree with the index it sits next to.
    */
-  const price = priceResult.status === 'fulfilled' ? (priceResult.value.series.at(-1)?.price ?? null) : null;
+  const price = priceSeries.data?.series.at(-1)?.price ?? null;
 
-  const assetDecimals = live?.assetDecimals ?? 6;
-  const shareDecimals = live?.shareDecimals ?? 18;
-  const symbol = live?.assetSymbol ?? 'asset';
+  const assetDecimals = liveData?.assetDecimals ?? 6;
+  const shareDecimals = liveData?.shareDecimals ?? 18;
+  const symbol = liveData?.assetSymbol ?? 'asset';
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -107,19 +118,19 @@ export default async function Page() {
         <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
           <div className="flex gap-1.5">
             <dt>vault</dt>
-            <dd className="figure text-slate-400" title={deployment.vault}>
-              {deployment.vault}
+            <dd className="figure text-slate-400" title={runtime.vault}>
+              {runtime.vault}
             </dd>
           </div>
           <div className="flex gap-1.5">
             <dt>chain</dt>
             <dd className="figure text-slate-400">
-              {deployment.chainName} ({deployment.chainId})
+              {runtime.chainName} ({runtime.chainId})
             </dd>
           </div>
           <div className="flex gap-1.5">
             <dt>record</dt>
-            <dd className="text-slate-400">{deployment.recordPath.split(/[\\/]/).slice(-3).join('/')}</dd>
+            <dd className="text-slate-400">{runtime.recordPath.split(/[\\/]/).slice(-3).join('/')}</dd>
           </div>
         </dl>
       </header>
@@ -128,26 +139,34 @@ export default async function Page() {
 
         {/* Current state: the chain */}
         <Panel title="Now" source="read from the chain, this request">
-          {live === null ? (
-            <Failure title="The chain could not be read." error={(liveResult as PromiseRejectedResult).reason} />
+          {live.error !== null ? (
+            <Failure title="The chain could not be read." error={live.error} />
+          ) : liveData === null ? (
+            <p className="text-sm text-slate-500">Reading the chain…</p>
           ) : (
             <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
               <Figure
                 label="Total assets"
-                value={displayBaseUnits(live.totalAssets, assetDecimals)}
+                value={displayBaseUnits(liveData.totalAssets, assetDecimals)}
                 suffix={symbol}
                 hint={`${assetDecimals} decimals`}
               />
               <Figure
                 label="Total shares"
-                value={displayBaseUnits(live.totalSupply, shareDecimals)}
+                value={displayBaseUnits(liveData.totalSupply, shareDecimals)}
                 hint={`${shareDecimals} decimals`}
               />
               <Figure
                 label="Price per share"
                 value={price !== null ? displayDecimal(price) : '—'}
                 suffix={price !== null ? symbol : undefined}
-                hint={price === null ? 'the index service is unavailable' : 'from the index service'}
+                hint={
+                  price !== null
+                    ? 'from the index service'
+                    : priceSeries.error !== null
+                      ? describeServiceFailure(priceSeries.error)
+                      : 'the index service is unavailable'
+                }
               />
             </dl>
           )}
@@ -155,47 +174,49 @@ export default async function Page() {
 
         {/* History: the index */}
         <Panel title="Then" source="read from the index service, which lags by design">
-          {candleResult.status === 'rejected' ? (
-            <Failure title="The index service could not be read." error={candleResult.reason} />
+          {candles.error !== null ? (
+            <Failure title="The index service could not be read." error={candles.error} />
+          ) : candles.data === undefined ? (
+            <p className="text-sm text-slate-500">Reading the index service…</p>
           ) : (
-            <PriceChart candles={candles} assetSymbol={symbol} bucketSeconds={60} />
+            <PriceChart candles={candlesData} assetSymbol={symbol} bucketSeconds={60} />
           )}
 
-          {status !== null && (
+          {statusData !== null && (
             <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-slate-800 pt-4 text-sm sm:grid-cols-4">
-              <Figure label="Indexed to block" value={String(status.lastIndexedBlock ?? '—')} />
+              <Figure label="Indexed to block" value={String(statusData.lastIndexedBlock ?? '—')} />
               <Figure
                 label="Lag"
-                value={String(status.lagBlocks ?? '—')}
+                value={String(statusData.lagBlocks ?? '—')}
                 suffix="blocks"
-                hint={`indexer last ran ${duration(status.staleSeconds)} ago`}
+                hint={`indexer last ran ${duration(statusData.staleSeconds)} ago`}
               />
-              <Figure label="Events" value={String(status.eventCount)} hint="deposits, withdrawals, yield" />
-              <Figure label="Snapshots" value={String(status.snapshotCount)} hint="one per indexed block" />
+              <Figure label="Events" value={String(statusData.eventCount)} hint="deposits, withdrawals, yield" />
+              <Figure label="Snapshots" value={String(statusData.snapshotCount)} hint="one per indexed block" />
             </dl>
           )}
 
-          {status !== null && status.coverage.startsLaterThanDeployment && (
+          {statusData !== null && statusData.coverage.startsLaterThanDeployment && (
             // Printed verbatim. This is the service's own statement that part of the vault's
             // life is not in the data, and paraphrasing it would soften a real gap.
             <p className="mt-4 rounded-md border border-slate-700/60 bg-slate-800/30 p-3 text-xs text-slate-400">
-              {status.coverage.note}
+              {statusData.coverage.note}
             </p>
           )}
         </Panel>
 
         {/* The comparison this page exists for */}
         <Panel title="Two sources, checked against each other" source="the reason both are on this page">
-          {live !== null && status !== null ? (
+          {liveData !== null && statusData !== null ? (
             <div className="space-y-2 text-sm">
               <p className="text-slate-300">
                 The chain says the vault holds{' '}
                 <span className="figure text-slate-100">
-                  {displayBaseUnits(live.totalAssets, assetDecimals)} {symbol}
+                  {displayBaseUnits(liveData.totalAssets, assetDecimals)} {symbol}
                 </span>
                 . The index has a record for every block up to{' '}
-                <span className="figure text-slate-100">{status.lastIndexedBlock ?? '—'}</span>, currently{' '}
-                <span className="figure text-slate-100">{status.lagBlocks ?? '—'}</span> blocks behind the head it
+                <span className="figure text-slate-100">{statusData.lastIndexedBlock ?? '—'}</span>, currently{' '}
+                <span className="figure text-slate-100">{statusData.lagBlocks ?? '—'}</span> blocks behind the head it
                 last saw.
               </p>
               <p className="text-xs text-slate-500">
@@ -205,25 +226,27 @@ export default async function Page() {
             </div>
           ) : (
             <p className="text-sm text-slate-500">
-              A comparison needs both sources. One of them is unavailable, so this panel does not guess.
+              {live.error !== null && status.error !== null
+                ? 'A comparison needs both sources. Neither is available, so this panel does not guess.'
+                : 'A comparison needs both sources. One of them is unavailable, so this panel does not guess.'}
             </p>
           )}
         </Panel>
 
         {/* The index's own health */}
-        {status !== null && (
+        {statusData !== null && (
           <Panel title="Index health" source="the index service's own report">
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
-              <Figure label="Healthy" value={status.healthy ? 'yes' : 'no'} />
-              <Figure label="Series from block" value={String(status.seriesFromBlock ?? '—')} />
-              <Figure label="Events from block" value={String(status.eventsFromBlock ?? '—')} />
+              <Figure label="Healthy" value={statusData.healthy ? 'yes' : 'no'} />
+              <Figure label="Series from block" value={String(statusData.seriesFromBlock ?? '—')} />
+              <Figure label="Events from block" value={String(statusData.eventsFromBlock ?? '—')} />
               <Figure
                 label="Updated"
-                value={status.updatedAt ? timeLabel(Math.floor(Date.parse(status.updatedAt) / 1000)) : '—'}
-                hint={duration(status.staleSeconds) + ' ago'}
+                value={statusData.updatedAt ? timeLabel(Math.floor(Date.parse(statusData.updatedAt) / 1000)) : '—'}
+                hint={duration(statusData.staleSeconds) + ' ago'}
               />
             </dl>
-            <p className="mt-3 text-xs text-slate-500">{status.note}</p>
+            <p className="mt-3 text-xs text-slate-500">{statusData.note}</p>
           </Panel>
         )}
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   useChainId,
+  useConfig,
   useConnect,
   useConnection,
   useConnectors,
@@ -18,7 +19,7 @@ import { RedeemForm } from '@/components/RedeemForm';
 import { figure } from '@/lib/vaultActions';
 import { shortenAddress } from '@/lib/format';
 import { ERC20_ABI, VAULT_ABI } from '@/lib/chain';
-import { addChainParameterFor, wagmiConfig } from '@/lib/wagmi';
+import { addChainParameterFor } from '@/lib/wagmi';
 
 /**
  * The wallet page: connect, read your position, deposit, redeem.
@@ -46,14 +47,22 @@ import { addChainParameterFor, wagmiConfig } from '@/lib/wagmi';
  * TWO CHAIN IDS, AND THEY ARE DIFFERENT FACTS
  *
  * `useChainId()` is the chain the wallet is actually on, and it is the one the pre-flight check
- * uses: deciding "is this wallet on the right chain" from the configured chain would answer
- * `true` always, and the check would never fire. The id in the `chainId` prop is the deployment
- * the server read. The page shows both, because "you are on chain 1" is only actionable beside
- * "this app is on chain 31337".
+ * uses: deciding "is this wallet on the right chain" from the app's own chain would answer
+ * `true` always, and the check would never fire. The id in the `chainId` prop is that other fact:
+ * the deployment's own chain, which the page above reads from `api/config` through
+ * `useRuntimeConfig()`. The page shows both, because "you are on chain 1" is only actionable
+ * beside "this app is on chain 31337".
  *
  * THE WAGMI v3 SHAPE, WHICH IS NOT THE v2 SHAPE THE SKILL LIBRARY DOCUMENTS
  *
- *   - `config` is a HOOK argument, not a `mutate` argument. `mutate({ connector })`, never
+ *   - These hooks take no `config` argument. They read the one config there is from the
+ *     `WagmiProvider` context -- built at runtime from `api/config` by `<Providers>` -- so the
+ *     `config: wagmiConfig as WagmiConfig` this file used to pass to every one of them is gone
+ *     along with the module-level config it named.
+ *   - The ABI is still what types the call: `functionName` and `args` are checked against the ABI
+ *     literal passed beside them, so a wrong argument type is a compiler error and not something
+ *     this file has to assert by hand.
+ *   - `config` is not a `mutate` argument either. `mutate({ connector })`, never
  *     `mutate({ config, connector })` -- `ConnectVariables` has no `config` field, which is what
  *     the compiler reports as "'config' does not exist in type 'ConnectVariables'".
  *   - The mutations are `mutate` / `mutateAsync`. `connect`, `disconnect`, `switchChain` and
@@ -61,21 +70,12 @@ import { addChainParameterFor, wagmiConfig } from '@/lib/wagmi';
  *     app does not build on a deprecation.
  *   - The connector LIST comes from `useConnectors()`. It was removed from `useConnect()`,
  *     `useDisconnect()` and `useSwitchConnection()`.
- *   - `switchChain`'s `chainId` is typed as the union of the config's chain ids, not `number`. So
- *     the prop is narrowed to that union below rather than widened, and a comparison against a
- *     plain `number` is the "'1' and '0' have no overlap" error the compiler reports for it.
+ *   - `switchChain`'s `chainId` is typed from the config's chains. While the config listed two
+ *     chains it was a two-link literal union, which is why the prop was narrowed to that union
+ *     and a comparison against a plain `number` produced the compiler's "'1' and '0' have no
+ *     overlap". The config now holds ONE chain, chosen at runtime, so the id is `number` and
+ *     there is no union left to narrow.
  */
-
-/**
- * The config's own type, so a hook's `functionName` and `args` are checked against the ABI
- * literal and `switchChain` accepts only a chain this config knows. Without it every call site
- * needs a hand-written annotation, which is how a wrong argument type gets asserted away by hand
- * instead of by the compiler.
- */
-type WagmiConfig = typeof wagmiConfig;
-
-/** One of the chain ids this app is configured for. Derived, never written out. */
-type SupportedChainId = (typeof wagmiConfig)['chains'][number]['id'];
 
 /** The vault's asset, read from the chain rather than typed: symbol and decimals both. */
 interface AssetIdentity {
@@ -88,23 +88,26 @@ export function VaultManager({
   vault,
   asset,
 }: {
-  chainId: SupportedChainId;
+  /** The deployment's chain id from `api/config`, via the page's `useRuntimeConfig()`. */
+  chainId: number;
   vault: `0x${string}`;
   asset: `0x${string}`;
 }) {
-  const connection = useConnection({ config: wagmiConfig as WagmiConfig });
-  const connectors = useConnectors({ config: wagmiConfig as WagmiConfig });
-  const { mutate: connect, error: connectError, isPending: isConnecting } = useConnect({
-    config: wagmiConfig as WagmiConfig,
-  });
-  const { mutate: disconnect } = useDisconnect({ config: wagmiConfig as WagmiConfig });
+  // The one config instance, built by `<Providers>` from the runtime config and held in React
+  // context. It is read here only for `addChainParameterFor`, which needs the chain object the
+  // config was built from rather than a second, hand-written description of the same chain.
+  const config = useConfig();
+  const connection = useConnection();
+  const connectors = useConnectors();
+  const { mutate: connect, error: connectError, isPending: isConnecting } = useConnect();
+  const { mutate: disconnect } = useDisconnect();
   // Used when more than one injected provider is present: switching connections is a different
   // act from switching chains, and the two are labelled differently below.
-  const { mutate: switchConnection } = useSwitchConnection({ config: wagmiConfig as WagmiConfig });
-  const { mutate: switchChain, isPending: isSwitching } = useSwitchChain({ config: wagmiConfig as WagmiConfig });
+  const { mutate: switchConnection } = useSwitchConnection();
+  const { mutate: switchChain, isPending: isSwitching } = useSwitchChain();
 
   // The wallet's chain. See the header: this is what the pre-flight check reads.
-  const walletChainId = useChainId({ config: wagmiConfig as WagmiConfig });
+  const walletChainId = useChainId();
   const account = connection.isConnected ? connection.address : undefined;
   const isWrongChain = account !== undefined && walletChainId !== chainId;
 
@@ -118,21 +121,18 @@ export function VaultManager({
   const hasConnector = firstConnector !== undefined;
 
   const assetRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: ERC20_ABI,
     address: asset,
     functionName: 'symbol',
   });
   const assetDecimalsRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: ERC20_ABI,
     address: asset,
     functionName: 'decimals',
   });
-  // The vault's share decimals. Read here rather than passed down from the server because the
-  // chain is the source: the deployment record names addresses, not precision.
+  // The vault's share decimals. Read here rather than passed down as a prop because the chain is
+  // the source: the deployment record names addresses, not precision.
   const shareDecimalsRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'decimals',
@@ -155,10 +155,11 @@ export function VaultManager({
   function switchToAppChain() {
     switchChain({
       chainId,
-      // A wallet that has never seen chain 31337 cannot switch to it, and the default failure is
-      // an opaque error from the extension. Handing it the parameter built from the app's own
-      // chain object is what makes the prompt say what it is about to add.
-      addEthereumChainParameter: addChainParameterFor(chainId),
+      // A wallet that has never seen this chain cannot switch to it, and the default failure is an
+      // opaque error from the extension. Handing it the parameter built from the config's own
+      // chain object is what makes the prompt say what it is about to add -- and `config` is the
+      // instance every hook above is using, not a second description of the same chain.
+      addEthereumChainParameter: addChainParameterFor(config, chainId),
     });
   }
 
@@ -222,8 +223,9 @@ export function VaultManager({
                   type="button"
                   onClick={() => {
                     if (firstConnector === undefined) return;
-                    // `config` was given to `useConnect` above. It is NOT a variable of the
-                    // mutation -- `ConnectVariables` has no such field.
+                    // `config` is not a variable of the mutation -- `ConnectVariables` has no
+                    // such field; `useConnect` reads it from the provider -- so the connector is
+                    // the only thing named here.
                     connect({ connector: firstConnector });
                   }}
                   disabled={isConnecting || !hasConnector}
@@ -345,27 +347,23 @@ function PositionPanel({
   account: `0x${string}` | undefined;
 }) {
   const shares = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'balanceOf',
     args: account === undefined ? undefined : [account],
   });
   const shareDecimalsRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'decimals',
   });
   const maxWithdraw = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'maxWithdraw',
     args: account === undefined ? undefined : [account],
   });
   const assetBalance = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: ERC20_ABI,
     address: asset,
     functionName: 'balanceOf',

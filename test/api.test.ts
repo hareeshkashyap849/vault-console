@@ -22,8 +22,32 @@
 import { strict as assert } from 'node:assert';
 import { afterEach, describe, it } from 'node:test';
 
-import { ServiceError, indexApi } from '../src/lib/api.ts';
+import { ServiceError, createIndexApi } from '../src/lib/api.ts';
 import { apiBase, apiUrl, rpcBase, rpcUrl } from '../src/lib/endpoints.ts';
+import type { RuntimeConfig } from '../src/lib/runtimeConfig.ts';
+
+/**
+ * A runtime config, as `scripts/build-runtime-config.mjs` writes one.
+ *
+ * The index client is built from this rather than from module state, because the service's address
+ * is not known at module load in a browser (see `src/lib/api.ts`). `indexApiUrl: '/'` is what the
+ * dev config uses: same-origin, which `next.config.ts` rewrites to the service.
+ */
+const CONFIG: RuntimeConfig = {
+  chainId: 31337,
+  chainName: 'Anvil Local',
+  vault: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
+  asset: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+  owner: null,
+  deployBlock: 8,
+  note: null,
+  recordPath: 'deployments/local.json',
+  rpcUrl: 'http://127.0.0.1:8545',
+  walletRpcUrl: 'http://127.0.0.1:8545',
+  indexApiUrl: '/',
+};
+
+const indexApi = createIndexApi(CONFIG);
 
 const realFetch = globalThis.fetch;
 const realEnv = { api: process.env.VAULT_API, rpc: process.env.VAULT_RPC };
@@ -77,12 +101,41 @@ describe('endpoints', () => {
 });
 
 describe('indexApi -- request construction', () => {
-  it('requests an ABSOLUTE url, which is the fix for the server-side 500', async () => {
-    delete process.env.VAULT_API;
+  it('requests a same-origin path when the config says the service is same-origin', async () => {
+    // This replaces a test that asserted an ABSOLUTE `http://127.0.0.1:8787/api/status`. That was
+    // right while these calls ran on the server, where a relative URL has no origin to resolve
+    // against. They run in the browser now, where the opposite is true: a same-origin path is what
+    // keeps the request inside the page's own origin -- and on a project site, inside its base
+    // path. An absolute `127.0.0.1` in a published page means "the reader's own machine".
     const { urls } = stubFetch(() => json({ ok: true }));
     await indexApi.status();
     assert.equal(urls.length, 1);
-    assert.match(urls[0]!, /^http:\/\/127\.0\.0\.1:8787\/api\/status$/);
+    assert.equal(urls[0], '/api/status');
+  });
+
+  it('uses an absolute URL when the config gives one', async () => {
+    const remote = createIndexApi({ ...CONFIG, indexApiUrl: 'https://index.example:9443/' });
+    const { urls } = stubFetch(() => json({ ok: true }));
+    await remote.status();
+    // The trailing slash on the base is stripped: `/api` would otherwise double it, and the
+    // service's own paths already begin with `/api`.
+    assert.equal(urls[0], 'https://index.example:9443/api/status');
+  });
+
+  /**
+   * @dev The distinction this whole refactor was for. A page with no route to the service is not a
+   * page whose service is down, and a reader sent to start a process that cannot help learns the
+   * wrong thing. No request is made at all, so nothing is claimed about a service never asked.
+   */
+  it('refuses, without asking, when the config says there is no route', async () => {
+    const staticHost = createIndexApi({ ...CONFIG, indexApiUrl: null });
+    const { urls } = stubFetch(() => json({ ok: true }));
+    const err = (await staticHost.status().catch((e: unknown) => e)) as ServiceError;
+    assert.ok(err instanceof ServiceError);
+    assert.equal(err.kind, 'no-route');
+    assert.equal(urls.length, 0, 'no request may be sent when there is no route');
+    assert.match(err.message, /without a route to the index service/);
+    assert.doesNotMatch(err.message, /not reachable/, 'and it must not blame a service it never contacted');
   });
 
   it('builds the query strings the service documents', async () => {
@@ -143,7 +196,11 @@ describe('indexApi -- failure classification', () => {
     assert.ok(err instanceof ServiceError);
     assert.equal(err.kind, 'unreachable');
     assert.equal(err.status, null);
-    assert.match(err.message, /not reachable at http:\/\//);
+    // The URL it tried is quoted so a reader can see where the console looked. It is a
+    // same-origin PATH now rather than an absolute URL, because these calls run in the browser:
+    // asserting `http://` here would have pinned the server-era behaviour and failed the moment
+    // the console became a static export. What matters is that the reader is told where it looked.
+    assert.match(err.message, /not reachable at \/api\/status\./);
     assert.match(err.message, /src\/api\/cli\.ts/);
   });
 

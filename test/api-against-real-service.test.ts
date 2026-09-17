@@ -32,12 +32,34 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { ServiceError, indexApi } from '../src/lib/api.ts';
+import { ServiceError, createIndexApi } from '../src/lib/api.ts';
 import { apiBase } from '../src/lib/endpoints.ts';
+import type { RuntimeConfig } from '../src/lib/runtimeConfig.ts';
 
 const reachable = await fetch(`${apiBase()}/api/status`, { signal: AbortSignal.timeout(3000) })
   .then((r) => r.ok)
   .catch(() => false);
+
+/**
+ * The client, pointed at the running service by its real origin.
+ *
+ * `apiBase()` still reads `VAULT_API` (or its default), which is where the service actually is on
+ * this machine; a hosted page would carry that origin in its generated config instead. The point
+ * of this file is unchanged: the same code path the stubbed test exercises, against a real answer.
+ */
+const indexApi = createIndexApi({
+  chainId: 0,
+  chainName: 'unused',
+  vault: '0x0000000000000000000000000000000000000000',
+  asset: '0x0000000000000000000000000000000000000000',
+  owner: null,
+  deployBlock: 0,
+  note: null,
+  recordPath: 'unused',
+  rpcUrl: 'http://127.0.0.1:8545',
+  walletRpcUrl: 'http://127.0.0.1:8545',
+  indexApiUrl: apiBase(),
+} as RuntimeConfig);
 
 if (!reachable) {
   console.log(

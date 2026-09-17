@@ -15,9 +15,6 @@ import {
   shortMessageOf,
   type TxState,
 } from '@/lib/txState';
-import { wagmiConfig } from '@/lib/wagmi';
-
-type WagmiConfig = typeof wagmiConfig;
 
 interface Props {
   chainId: number;
@@ -55,6 +52,13 @@ interface Props {
  * the allowance is refetched after a deposit confirms too. Re-reading only after approvals
  * leaves behind the exact stale value that caused the bug.
  *
+ * NO `config` ARGUMENT ON THE HOOKS BELOW
+ *
+ * They read it from the `WagmiProvider` context, which holds the only config there is: `<Providers>`
+ * builds it at runtime from `api/config` and hands it to that provider. There is no module-level
+ * config left to pass, and building a second one here would give wagmi's hooks a store nobody
+ * writes to.
+ *
  * THE NUMBER OF HOOKS DOES NOT DEPEND ON THE WALLET
  *
  * Every read here is called unconditionally, with `args: undefined` when there is no account. An
@@ -90,7 +94,6 @@ export function DepositForm({
   const decimalsKnown = assetDecimals !== null;
 
   const balanceRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: ERC20_ABI,
     address: asset,
     functionName: 'balanceOf',
@@ -104,7 +107,6 @@ export function DepositForm({
    * re-read can happen from an effect as well as from a click.
    */
   const allowanceRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: ERC20_ABI,
     address: asset,
     functionName: 'allowance',
@@ -134,7 +136,6 @@ export function DepositForm({
 
   /** What the user will receive: the vault's own `previewDeposit`, not arithmetic here. */
   const previewRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'previewDeposit',
@@ -150,7 +151,6 @@ export function DepositForm({
    * explain a refusal, never to claim a success.
    */
   const simulation = useSimulateContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'deposit',
@@ -167,7 +167,7 @@ export function DepositForm({
     mutate: writeContract,
     isPending: isWriting,
     reset: resetWrite,
-  } = useWriteContract({ config: wagmiConfig as WagmiConfig });
+  } = useWriteContract();
 
   /**
    * TWO receipts, one per transaction, because a deposit can genuinely be two transactions and
@@ -177,11 +177,9 @@ export function DepositForm({
    * unconditionally and the hook ORDER does not depend on how far the flow has got.
    */
   const approveReceipt = useWaitForTransactionReceipt({
-    config: wagmiConfig as WagmiConfig,
     hash: approveTx.hash ?? undefined,
   });
   const depositReceipt = useWaitForTransactionReceipt({
-    config: wagmiConfig as WagmiConfig,
     hash: depositTx.hash ?? undefined,
   });
 

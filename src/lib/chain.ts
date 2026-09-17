@@ -1,5 +1,4 @@
 import { createPublicClient, http, parseAbi } from 'viem';
-import { rpcUrl } from './endpoints.ts';
 
 /**
  * Live chain reads.
@@ -158,12 +157,11 @@ function describeChainFailure(err: unknown, url: string): ChainError {
 }
 
 /** Run a chain read, turning any failure into a `ChainError`. */
-async function withChainErrors<T>(fn: () => Promise<T>): Promise<T> {
-  const url = rpcUrl();
+async function withChainErrors<T>(rpcUrl: string, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
-    throw describeChainFailure(err, url);
+    throw describeChainFailure(err, rpcUrl);
   }
 }
 
@@ -173,11 +171,20 @@ async function withChainErrors<T>(fn: () => Promise<T>): Promise<T> {
  * The console reads the SAME record the deploy script wrote and the indexer reads. A
  * hand-copied address here would be correct until the next deployment and then silently
  * wrong -- the page would query an address with no code and report zeros.
+ *
+ * THE RPC URL IS AN ARGUMENT, AND THAT IS THE STATIC-EXPORT CHANGE
+ *
+ * These reads used to run on the server, so the endpoint came from `endpoints.ts`, which reads
+ * `VAULT_RPC` at request time. They now run in the browser, and there is no request-time env
+ * there: `process.env.VAULT_RPC` in a client bundle is not the operator's value, it is
+ * `undefined`, and the fallback would quietly read the wrong chain. So the endpoint is passed in
+ * from the runtime config, which is generated from the same deployment record -- one source, and
+ * no way for the browser to fall back to a default that points somewhere else.
  */
-export async function readDeployment(config: ChainConfig) {
-  return withChainErrors(async () => {
+export async function readDeployment(config: ChainConfig, rpcUrl: string) {
+  return withChainErrors(rpcUrl, async () => {
     const client = createPublicClient({
-      transport: http(rpcUrl(), { batch: true }),
+      transport: http(rpcUrl, { batch: true }),
     });
 
     // Read in one round trip. These are all `view` calls, so nothing here can change state.
@@ -202,9 +209,9 @@ export async function readDeployment(config: ChainConfig) {
 }
 
 /** One holder's position, for the address the reader asks about. */
-export async function readPosition(config: ChainConfig, account: `0x${string}`) {
-  return withChainErrors(async () => {
-    const client = createPublicClient({ transport: http(rpcUrl(), { batch: true }) });
+export async function readPosition(config: ChainConfig, account: `0x${string}`, rpcUrl: string) {
+  return withChainErrors(rpcUrl, async () => {
+    const client = createPublicClient({ transport: http(rpcUrl, { batch: true }) });
     const [shares, maxWithdraw, balance] = await Promise.all([
       client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'balanceOf', args: [account] }),
       client.readContract({ address: config.vault, abi: VAULT_ABI, functionName: 'maxWithdraw', args: [account] }),

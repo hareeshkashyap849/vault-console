@@ -15,9 +15,6 @@ import {
   shortMessageOf,
   type TxState,
 } from '@/lib/txState';
-import { wagmiConfig } from '@/lib/wagmi';
-
-type WagmiConfig = typeof wagmiConfig;
 
 interface Props {
   chainId: number;
@@ -54,6 +51,12 @@ interface Props {
  * The two units also carry different decimal counts (18 for shares, 6 for this asset), which is
  * why each figure is formatted with its own: one formatter for both is the bug this repository
  * already fixed once.
+ *
+ * THE HOOKS TAKE NO `config` ARGUMENT
+ *
+ * They read it from the `WagmiProvider` context. `<Providers>` builds the one config from
+ * `api/config` at runtime and gives it to that provider: there is no module-level config left to
+ * pass, and building another one here would leave wagmi's hooks reading a store nobody writes to.
  */
 export function RedeemForm({
   chainId,
@@ -74,14 +77,12 @@ export function RedeemForm({
   const sharesKnown = shareDecimals !== null;
 
   const shareBalanceRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'balanceOf',
     args: account === undefined ? undefined : [account],
   });
   const shareDecimalsRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'decimals',
@@ -97,7 +98,6 @@ export function RedeemForm({
    * forbids. The user is told; the decision stays theirs.
    */
   const maxWithdrawRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'maxWithdraw',
@@ -126,7 +126,6 @@ export function RedeemForm({
 
   /** What the user will receive, from the vault's own `previewRedeem`. */
   const previewRead = useReadContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'previewRedeem',
@@ -134,7 +133,6 @@ export function RedeemForm({
   });
 
   const simulation = useSimulateContract({
-    config: wagmiConfig as WagmiConfig,
     abi: VAULT_ABI,
     address: vault,
     functionName: 'redeem',
@@ -149,10 +147,9 @@ export function RedeemForm({
     mutate: writeContract,
     isPending: isWriting,
     reset: resetWrite,
-  } = useWriteContract({ config: wagmiConfig as WagmiConfig });
+  } = useWriteContract();
 
   const receipt = useWaitForTransactionReceipt({
-    config: wagmiConfig as WagmiConfig,
     hash: tx.hash ?? undefined,
   });
 

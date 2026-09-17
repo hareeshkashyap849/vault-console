@@ -1,5 +1,10 @@
-import { indexApi } from '@/lib/api';
-import { loadDeployment } from '@/lib/deployment';
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+
+import { useRuntimeConfig } from '@/app/providers';
+import { createIndexApi } from '@/lib/api';
 import { Failure, Figure, Panel } from '@/components/Panels';
 import { duration, displayBaseUnits, shortenAddress, timeLabel } from '@/lib/format';
 import { amountCell, decimalsFrom, newestFirst, priceRows, tallyKinds, truncationLabel } from '@/lib/history';
@@ -37,45 +42,55 @@ import type { PriceResponse, Status, SummaryResponse, VaultEvent } from '@/lib/t
  * `/api/summary`, the label is built from both, and a `shown > total` disagreement is
  * reported rather than clamped. See `truncationLabel` in `src/lib/history.ts`.
  */
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+/**
+ * THE READ MOVED TO THE BROWSER, AND THE INDEPENDENCE MOVED WITH IT
+ *
+ * This was a server component that read four endpoints per request with `dynamic =
+ * 'force-dynamic'` and `cache: 'no-store'`. The published console is a static export and a static
+ * host runs no server, so the four reads are four client queries with `staleTime: 0` -- which is
+ * the same freshness decision, made where the reads now happen.
+ *
+ * Four queries rather than one means four independent failures, which is what the `Promise.allSettled`
+ * below used to guarantee: the tally and the rows come from different endpoints of the same service,
+ * and one failing must not blank the page.
+ */
 
 /** How many rows each table asks for. Named here so the label and the request cannot drift. */
 const EVENT_ROWS = 50;
 const PRICE_ROWS = 25;
 
-export default async function Page() {
-  const deployment = loadDeployment();
+export default function Page() {
+  const runtime = useRuntimeConfig();
+  const api = useMemo(() => createIndexApi(runtime), [runtime]);
 
   // Independent, for the same reason `/vault` keeps its two sources apart: the tally and the
   // rows come from different endpoints of the same service, and one of them failing should
-  // not blank the page. All three are allowed to fail on their own.
-  const [statusResult, summaryResult, eventsResult, priceResult] = await Promise.allSettled([
-    indexApi.status(),
-    indexApi.summary(),
-    indexApi.events({ limit: EVENT_ROWS }),
-    indexApi.price(PRICE_ROWS),
-  ]);
+  // not blank the page. All four are allowed to fail on their own.
+  const statusQuery = useQuery({ queryKey: ['status', runtime.indexApiUrl], queryFn: () => api.status() });
+  const summaryQuery = useQuery({ queryKey: ['summary', runtime.indexApiUrl], queryFn: () => api.summary() });
+  const eventsQuery = useQuery({
+    queryKey: ['events', EVENT_ROWS, runtime.indexApiUrl],
+    queryFn: () => api.events({ limit: EVENT_ROWS }),
+  });
+  const priceQuery = useQuery({
+    queryKey: ['price', PRICE_ROWS, runtime.indexApiUrl],
+    queryFn: () => api.price(PRICE_ROWS),
+  });
 
-  const status: Status | null = statusResult.status === 'fulfilled' ? statusResult.value : null;
-  const summary: SummaryResponse | null = summaryResult.status === 'fulfilled' ? summaryResult.value : null;
-  const events: VaultEvent[] = eventsResult.status === 'fulfilled' ? eventsResult.value.events : [];
-  const price: PriceResponse | null = priceResult.status === 'fulfilled' ? priceResult.value : null;
+  const status: Status | null = statusQuery.data ?? null;
+  const summary: SummaryResponse | null = summaryQuery.data ?? null;
+  const events: VaultEvent[] = eventsQuery.data?.events ?? [];
+  const price: PriceResponse | null = priceQuery.data ?? null;
 
   const decimals = decimalsFrom(price);
   const tally = summary === null ? null : tallyKinds(summary);
   const rows = newestFirst(events);
   const series = price === null ? [] : priceRows(price.series, PRICE_ROWS);
 
+  const loading = statusQuery.isPending || summaryQuery.isPending || eventsQuery.isPending;
+
   /** The first failure to reach the page, in the order a reader would look for it. */
-  const failure: unknown | null =
-    statusResult.status === 'rejected'
-      ? statusResult.reason
-      : summaryResult.status === 'rejected'
-        ? summaryResult.reason
-        : eventsResult.status === 'rejected'
-          ? eventsResult.reason
-          : null;
+  const failure: unknown | null = statusQuery.error ?? summaryQuery.error ?? eventsQuery.error ?? null;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -88,8 +103,8 @@ export default async function Page() {
         <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
           <div className="flex gap-1.5">
             <dt>vault</dt>
-            <dd className="figure text-slate-400" title={deployment.vault}>
-              {deployment.vault}
+            <dd className="figure text-slate-400" title={runtime.vault}>
+              {runtime.vault}
             </dd>
           </div>
           <div className="flex gap-1.5">
@@ -98,12 +113,21 @@ export default async function Page() {
           </div>
           <div className="flex gap-1.5">
             <dt>record</dt>
-            <dd className="text-slate-400">{deployment.recordPath.split(/[\\/]/).slice(-3).join('/')}</dd>
+            <dd className="text-slate-400">{runtime.recordPath.split(/[\\/]/).slice(-3).join('/')}</dd>
           </div>
         </dl>
       </header>
 
       <div className="grid gap-6">
+        {loading && failure === null ? (
+          // A first render has no data and no error, which is not the same as an empty index. The
+          // tables below are guarded on their values, so without this the page would look like a
+          // service with nothing in it for as long as the first read takes.
+          <Panel title="Index" source="the only source this page reads">
+            <p className="text-sm text-slate-500">Reading the index service…</p>
+          </Panel>
+        ) : null}
+
         {failure !== null ? (
           <Panel title="Index" source="the only source this page reads">
             <Failure title="The index service could not be read." error={failure} />
@@ -201,8 +225,8 @@ export default async function Page() {
 
         {/* The rows a reader can check against a block explorer. */}
         <Panel title="Recent events" source="the index service, newest first">
-          {eventsResult.status === 'rejected' ? (
-            <Failure title="The events could not be read." error={eventsResult.reason} />
+          {eventsQuery.error !== null ? (
+            <Failure title="The events could not be read." error={eventsQuery.error} />
           ) : rows.length === 0 ? (
             <p className="text-sm text-slate-400">
               No events are indexed in this range. An empty table here is not evidence that nothing happened — check
