@@ -34,7 +34,7 @@ const VALID: RuntimeConfig = {
   vault: '0x7941438ee07bea4469ccd4bec583e9fb24037f35',
   asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   owner: '0x2ae746c0ff0295c2da1ac338656f247e9758e034',
-  deployBlock: 46919124,
+  deployBlock: 46919125,
   note: 'Testnet only: no real funds, not audited.',
   recordPath: 'deployments/base-sepolia.json',
   rpcUrl: 'https://sepolia.base.org',

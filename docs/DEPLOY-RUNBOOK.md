@@ -8,7 +8,7 @@
 > |---|---|
 > | vault | `0x7941438ee07bea4469ccd4bec583e9fb24037f35` |
 > | deploy tx | `0x91cf6315b578512db189f8429a0dc76f8131328e9a14e4b5dd522699b69c663d` |
-> | deploy block | 46,919,124 |
+> | deploy block | 46,919,125 — the block **containing** the deploy tx above (46,919,124 is the deployment script's `DeployValidation` library, one block earlier) |
 > | owner / deployer | `0x2aE746C0ff0295c2da1aC338656F247e9758E034` |
 > | asset | Circle test USDC `0x036CbD53842c5426634e7929541eC2318f3dCF7e`, 6 decimals |
 > | actual cost | ~0.0000095 ETH (the fork rehearsal predicted 0.0000224; the estimate is the max fee) |
@@ -18,8 +18,12 @@
 > runbook that start with `web3-development-execute/` are workspace paths, not paths in this repository):
 > chain id, bytecode at the address, `asset()`, `owner()`, `decimals()`, `symbol()`.
 >
-> **The vault is deployed and unfunded**: `totalAssets` and `totalSupply` are 0, and it has no events. That
-> is stated here rather than left to be discovered, and the deployment record says it too.
+> **The vault is deployed and funded** — 21 USDC of test assets (`totalAssets` `21000000`,
+> `totalSupply` `21000000000000000000`, read at block 46,947,044), with one real `Deposit` at block
+> 46,919,498. Those totals move with every deposit or withdrawal, so read them from the chain rather
+> than from this line; the deployment record's note says the same. (An earlier version of this
+> paragraph said the vault was unfunded with no events. It was true when written and false by the
+> time anyone read it — the same failure mode the record's note had.)
 >
 > **Step 4 was verified end to end without a host (2026-09-16, server build).** The console was built with the exact variables Vercel
 > will use — `VAULT_DEPLOYMENT=deployments/base-sepolia.json` (a copy inside this repository, because a
@@ -34,12 +38,14 @@
 > Then     The index service could not be read. (names the URL and says it is a separate process)
 > ```
 >
-> **That transcript is kept as the record of what was measured, with one line now out of date**: it
+> **That transcript is kept as the record of what was measured, with two lines now out of date**: it
 > comes from the **server-built** console, where a failed index read produced "the index service could
 > not be read". The console is a **static export** as of 2026-09-17 (`STATIC-EXPORT-MIGRATION.md`, beside this file),
 > `indexApiUrl` is `null` on a static host, and the same panel now reports that the **page has no route
-> to the index service** and makes no request at all. The addresses, chain and `Now` line above are
-> unaffected — the record they came from is still the single source.
+> to the index service** and makes no request at all. The other is the `Now` line: `Total assets 0 USDC ·
+> Total shares 0` was the chain on 2026-09-16, and the vault has held 21 USDC of test assets since
+> 2026-09-17 — the page reads the chain, so it now prints those figures instead. The addresses, the chain
+> and the panel behaviour above are unaffected — the record they came from is still the single source.
 >
 > So the `Now` panel reads the real deployed vault from the real chain, and the `Then` panel fails
 > honestly because nothing hosts the index. Shipping it is now a matter of the account, not of
