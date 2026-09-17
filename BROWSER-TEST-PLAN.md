@@ -39,6 +39,15 @@
 > is not the current count. The row is left as it stands, because it is the record of what was measured
 > then; this amendment is added beside it rather than substituted for it — the same treatment §5's
 > amendments give their own superseded text.
+>
+> **Amendment, 2026-09-18: the L2 row's "14/14 passed" is the console page's slice of the 51 assertions
+> that file holds, not the file's own total.** `docs/evidence/browser-assert.txt` ends "51/51 assertions
+> passed" and says on its next line that "the console accounts for the first 14 of them — the same
+> assertions this tool made before the page moved, at a new URL"; §5's first row splits the same 14 out
+> of the 51 and names them. So the row cites a real measurement of a real subset — the console's 14
+> assertions, all passing — while the file it points at holds 51 and passes all 51. The **14/14** is
+> left as it stands for the reason the L1 row above is: it is what was measured for that page, and the
+> number it is not is the file's total.
 
 ---
 
