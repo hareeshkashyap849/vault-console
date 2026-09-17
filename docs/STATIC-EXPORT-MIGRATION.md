@@ -42,7 +42,10 @@ through the generated runtime config instead of per request.**
 > Two categories were left deliberately, and are listed here rather than quietly fixed:
 > `SUPPORT-AND-SIGNOFF.md` §5's dated verdicts and `BROWSER-TEST-PLAN.md` still record `passed`
 > against the server-rendered pages and have not been re-measured, and the 51 browser assertions
-> have not been re-run against the export. The comment headers of `src/lib/endpoints.ts` and
+> have not been re-run against the export. **The second half of that sentence was true when it was
+> written and is no longer: the assertions were run against the export on 2026-09-18 and scored 37/51 —
+> see "The 51 assertions, re-run against the export" below. The first half still stands.**
+> The comment headers of `src/lib/endpoints.ts` and
 > `src/lib/chain.ts` were fixed in the pass after this one, along with the labels of two assertions
 > in `tools/browser-assert.mjs`, the message in `tools/sync-deployment-record.mjs`, and a false
 > claim in `SUPPORT-AND-SIGNOFF.md` that the page had no interactive controls (it was falsified the
@@ -96,12 +99,192 @@ Base Sepolia (84532), **20 USDC** and **20 shares** live from `https://sepolia.b
 the history panel reports that the page has no route to the index service rather than blaming
 a service it never asked. Evidence: `verification/out/pages-live-console-values.png`.
 
+## The 51 assertions, re-run against the export (2026-09-18)
+
+**This section replaces the note that used to sit under "Also not done" saying they had not been re-run.
+They have now been run, and the result is `37/51 passed, 14 failed`.** No assertion was edited to make
+anything pass; the run below is the tool exactly as it stands.
+
+### The plain command cannot start, and the reason is the route rather than the site
+
+`node tools/browser-assert.mjs --url https://hareeshkashyap849.github.io/vault-console/` reaches two
+assertions and exits 1:
+
+```
+PASS  index service is reachable  -- lag 538 blocks
+FAIL  page is reachable  -- TypeError: fetch failed
+
+Is the dev server running at https://hareeshkashyap849.github.io/vault-console/?  npm run dev
+```
+
+`TypeError: fetch failed` is `fetch`'s outermost error and says nothing, so the cause chain was read
+rather than assumed. Directly, with TLS verification on, the cause is
+`ERR_TLS_CERT_ALTNAME_INVALID` — *"Hostname/IP does not match certificate's altnames"* — i.e. the host is
+being intercepted. With verification off it becomes `UND_ERR_CONNECT_TIMEOUT` after 10 s, so the direct
+route does not reach it either way. The same process fetches `https://sepolia.base.org` normally, which is
+what makes this a property of one route rather than of the network.
+
+The site is reachable from Node over the workspace's SOCKS5 route, which is what AGENTS.md records that
+proxy for. `web3-development-execute/toolchain/fetch-via-socks.mjs` routes the global `fetch` through the
+tunnel and leaves loopback alone, so the tool runs **unmodified** — the assertions were not touched, only
+the socket the bytes travel over changed:
+
+```
+node --import web3-development-execute/toolchain/fetch-via-socks.mjs \
+  tools/browser-assert.mjs --url https://hareeshkashyap849.github.io/vault-console/
+```
+
+### What those two cross-checks compare against, and whether it means anything here
+
+The tool mixes two kinds of check. Most drive the real browser against the page; two reach out to services
+on this machine. Both of the latter are addressed at **the local stack**, and neither is a statement about
+the published site:
+
+| The tool's check | What it actually contacts | Why it is not meaningful for the published site |
+|---|---|---|
+| `index service is reachable` | `http://127.0.0.1:8787/api/status` — the local index service, chain `31337` | the published page never contacts an index service: a static host has no route to one, so its figures come from the build-time snapshot in `public/api/`. The check passed with `lag 538 blocks` while the published page rendered `Lag 26418 blocks` from its snapshot. It is a health report on a local process |
+| the `totalSupply` cross-check | `http://127.0.0.1:8545` `eth_call` on `0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0` — **Anvil**, chain `31337` | the published site reads **Base Sepolia** (chain `84532`) at `0x7941438ee07bea4469ccd4bec583e9fb24037f35`. Different chain, different vault |
+
+That mismatch is not merely decorative — it turns two assertions into passes that cannot fail for the
+reason they exist:
+
+- **`the raw uint256 string does NOT appear as a standalone figure`** tested the published page for
+  Anvil's raw supply, `859021905704231281673`. The published page's own raw supply is
+  `21000000000000000000` (Base Sepolia, measured in this session: `totalSupply`
+  `0x000000000000000000000000000000000000000000000001236efcbcbb340000`). **The assertion therefore
+  cannot detect the defect it exists to detect on this site.** The property it stands for does hold on
+  the capture — no run of 19 or more digits appears anywhere in the settled text of the export, checked
+  over the captured pages — so this is a mis-aimed check being right by accident, which is the more
+  dangerous of the two.
+- **`totalSupply rendered as SHARES`** compares the rendered string against
+  `onChain.toLocaleString('en-US')` = `859,021,905,704,231,281,673`. Any page on any other chain differs
+  from that number, so the check's third clause passes for a page on a different chain regardless of what
+  the page rendered. Its PASS carries no information about the published site.
+- A third is weak for an unrelated reason: **`no raw base-unit integer anywhere in the page`** is
+  `!/\b\d{19,}\b/.test(text) || page.text.includes(',')`, so any page containing a single comma passes it.
+  The exports all contain commas.
+
+### The 14 failures, verbatim
+
+```
+FAIL  totalSupply rendered as SHARES, not as the raw uint256  -- page shows null; chain base units are 859021905704231281673
+FAIL  a candle tooltip carries the exact stored strings  -- open  1 / high  1
+FAIL  the landing page is reachable and renders  -- 159 chars
+FAIL  the landing page links to the console  -- /vault-console/, /vault-console/vault/, /vault-console/history/, /vault-console/vault/manage/
+FAIL  the landing page links to the wallet page  -- /vault-console/, /vault-console/vault/, /vault-console/history/, /vault-console/vault/manage/
+FAIL  the landing page links to the history page  -- a route nobody links to is a route nobody reaches
+FAIL  the landing page explains the two sources  -- the pairing is the point of the console
+FAIL  the landing page names the deployment it read  -- or says no record could be read -- never a guessed address
+FAIL  the console answered at /vault, not at /  -- rendered at /vault-console/vault/
+FAIL  the console still labels its first panel with the source it came from  -- each panel carries its own source, which is the point of the page
+FAIL  a deposit control or its stated absence is on the page  -- Disconnect | Injected | MetaMask | Max | Max
+FAIL  a redeem control or its stated absence is on the page  -- Disconnect | Injected | MetaMask | Max | Max
+FAIL  the history page says it reads ONE source and names it  -- a page that mixes sources has to say which each figure came from; this one has only one
+FAIL  the nav links every route from the history page  -- /vault-console/, /vault-console/vault/, /vault-console/history/, /vault-console/vault/manage/
+```
+
+**Every one of the 14 is traceable to an assumption the tool makes about the environment it was written
+in, and none of them is a defect in the exported page.** In four classes:
+
+**1. It reads before the client has rendered (4 failures).** `visit()` navigates, waits for `main`, and
+probes. On the server-rendered pages `main` implied the content was in the document; in an export `main`
+is in the static HTML and the client fills it afterwards. The proof is mechanical: reproducing the tool's
+own three steps on all three routes returned **exactly 159 characters** every time, and the page then
+settles to 3,433 / 2,285 / 2,406. Those 159 characters are the loading screen this file already documents:
+
+```
+VAULT CONSOLE
+Overview
+Console
+History
+Wallet
+Loading the deployment record…
+Reading the addresses this console is pointed at. One small file, then the chain.
+```
+
+When the pages are read settled, the three text assertions behind it hold — `/two independent sources|Why two sources/i`
+matches 3 times, `Anvil` appears once ("on the local Anvil chain this deployment record describes"), and
+`Vault Console` appears twice. **So this class is a measurement artefact, not a page regression:** the
+assertions are satisfied by the page and were run too early. This is the class this file predicted —
+"several will need updating for the client-rendered ones".
+
+`totalSupply rendered as SHARES` is the same class with the opposite interleaving. It reported `page shows
+null` while the *same* evaluate saw `4 sections` and `17 rects`, so at that instant the panels and the
+chart existed and the chain figure did not. Polling a fresh load records the phases directly — sample 3 is
+the 159-character screen, sample 12 is `3 sections` with the NOW panel reading **`Reading the chain…`**,
+sample 16 is `4 sections / 17 rects` and fully rendered. Two runs produced both orderings (chart before
+figures, figures before chart), which is what makes this a race rather than a rule: the chart comes from
+the static snapshot and the figures come over the network from `sepolia.base.org`.
+
+**2. The site is mounted at `/vault-console/` and uses trailing slashes (5 failures).** The tool compares
+hrefs against `/vault`, `/vault/manage`, `/history` and `location.pathname` against `/vault`. The rendered
+hrefs are `/vault-console/vault/`, `/vault-console/vault/manage/` and `/vault-console/history/`, and the
+console renders at `/vault-console/vault/`. **The page links every route correctly** — the nav assertion's
+own failure detail lists all four correct hrefs — and the console did answer at `/vault`. These five are
+the tool being written for a root-mounted origin, which is exactly what a project-page URL is not.
+
+**3. Copy the index-snapshot work changed (2 failures).**
+
+- `the console still labels its first panel with the source it came from` looks for
+  `read from the index service, which lags by design`. That sentence is gone from the export: with no live
+  index to lag, the panel now reads **`read from a snapshot of the index service, taken when this page was
+  published`** (and the chain panel reads `read from the chain, this request`). Zero hits when settled.
+- `the history page says it reads ONE source and names it` is a conjunction. Its first half,
+  `Nothing on this page was read from the chain`, **still matches**. Its second half,
+  `read from the index service alone`, does not: the page now says **`Read from a snapshot of the index
+  service, taken when this page was published`**. The page still names its single source; the literal the
+  assertion wants is the pre-snapshot one.
+
+**4. The wallet-connected state, and one stale fixture value (3 failures).**
+
+- `a deposit control or its stated absence is on the page` and the same for redeem: the probe accepts
+  either a control matching `Approve|Deposit`/`Redeem` **or** the text `Connect a wallet to deposit`. The
+  browser had a wallet connected, so the second branch is legitimately absent, and with no amount entered
+  the form renders no submit control — the buttons were `Disconnect | Injected | MetaMask | Max | Max`.
+  Measured in the connected state: typing an amount into `Deposit amount in USDC` produces
+  **`1. Approve USDC`** and `Clear`. **There is no third branch for "connected, nothing entered yet"**, which
+  is a gap in the assertion and not in the page.
+- `a candle tooltip carries the exact stored strings` expects `/open\s+1\.1/`. The published page's tooltip
+  does carry the exact stored strings — but from **its own** snapshot, whose price is `1` rather than the
+  local fixture's `1.1`. The spacing below is part of the stored string, which is why it is quoted in a
+  block rather than run into the sentence:
+
+  ```
+  open  1 / high  1
+  ```
+
+  The assertion is about a dataset that the export does not have.
+
+### What remains unverifiable against the export, and why
+
+- **Anything that needs a live index service.** The published site has no route to one — `indexApiUrl` is
+  NULL on a static host, which is the distinct `no-route` failure kind — and it reads the build-time
+  snapshot instead. So the tool's index-side assertions address a service this deployment never contacts,
+  and cannot be made meaningful here by re-pointing a URL.
+- **The two chain cross-checks.** They would have to be re-aimed at Base Sepolia and at the deployed vault
+  (`0x7941438e…`) before a PASS from them would mean anything. Until then their PASSes on this site are
+  vacuous, which is worse than failing: a failing assertion gets investigated.
+- **The tooltip's expected value**, which belongs to the local dataset.
+- **Nothing here is evidence about the wallet rows.** This run sends no transaction and injects no failure;
+  it reads pages. Whatever it says about `/vault/manage`, it says about a page in its default state.
+
+**What this run does establish**: the export serves every route, the browser renders them, the four-panel
+console still draws its chart with zero `NaN` coordinates, the history tables still render and their own
+arithmetic still matches the painted DOM, and the page never shows a raw base-unit integer. Those are the
+assertions that pass, and they pass against the published site rather than against a local build.
+
 ## Also not done
 
-- The 51 browser assertions (`tools/browser-assert.mjs`) have not been re-run against the
-  export. They were written against the server-rendered pages; several will need updating for
-  the client-rendered ones, and one of them is worth keeping precisely because it asserts the
-  thing this migration risked.
+- ~~The 51 browser assertions (`tools/browser-assert.mjs`) have not been re-run against the
+  export.~~ **Done (2026-09-18), and the guess in that sentence was right: 4 of the 14 failures are
+  exactly "written against the server-rendered pages", 5 are the `/vault-console/` mount, 2 are copy this
+  migration's snapshot work changed, 2 are the wallet-connected state the tool does not model, and 1 is a
+  stale fixture value. Result `37/51 passed, 14 failed`, none of them a defect in the export — see "The 51
+  assertions, re-run against the export" above.** No assertion was edited to make anything pass. The
+  assertion the sentence calls worth keeping — the one asserting the thing this migration risked, i.e. that
+  nothing between the reader and the service is cached — is still worth keeping, and it is still the one
+  the snapshot has made hard to read: the page now reads a file, so "not cached" and "static" look alike
+  from the outside.
 - ~~`/history` on the published site has no data: a static host has no route to the index
   service.~~ **Done (2026-09-17):** the build now captures the service's own answers into
   `public/api/` and the pages label them as a snapshot — so this is no longer a page that shows
