@@ -246,13 +246,121 @@ the console column means "the console errors and uncaught exceptions this page p
 >
 > Until all three are done, the honest reading of the session is: **state changed, a `Deposit` event
 > was emitted, and the path from the connected account to that event is not established.**
+>
+> **Second amendment, 2026-09-17 (later the same day): all three of those checks were run, and a
+> fourth question was answered while running them. This block is added, not substituted — the list
+> above is the record of what was open when it was written, and item 4 below is a check that list did
+> not name.**
+>
+> Everything here is a direct read of Base Sepolia (chain `84532`, `https://sepolia.base.org`) at
+> head **46946111** or later, by `eth_getCode`, `cast receipt`, `cast call` and a topic-filtered
+> `eth_getLogs`. Each raw value is quoted as it came back.
+>
+> **1. The account carries an EIP-7702 delegation — the check that was open resolves YES.** The 7702
+> story this file has twice declined to assert is now established by measurement rather than guessed.
+>
+> - `eth_getCode 0x2aE746C0ff0295c2da1aC338656F247e9758E034` → **23 bytes** of code, exactly the
+>   length of a delegation designator, and the whole value is
+>   `0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b`.
+> - First four bytes: **`0xef0100`** — the EIP-7702 designator. The 20 bytes after it are the
+>   delegate: **`0x63c0c19a282a1b52b07dd5a65b58948a07dae32b`**.
+> - What that means, in the form the EIP states it: that account's code is not bytecode, it is a
+>   pointer. Any call to `0x2aE7…E034` executes the delegate's code **in that account's storage
+>   context**. This account is not a plain EOA at `latest`, and the address that appears in the log
+>   below is an account that behaves like a contract.
+> - What the delegate is, from its own answers: `NAME()` → `"EIP7702StatelessDeleGator"`,
+>   `VERSION()` → `"1.3.0"`, `delegationManager()` → `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3`
+>   (the address in check 2), `entryPoint()` → `0x0000000071727De22E5E9d8BAf0edAc6f37da032`. It is
+>   11,185 bytes of code, not a designator.
+> - The same delegation is visible in the deposit transaction's own envelope: `cast tx
+>   0xbcc9f564…` reports `type: 0x4` (a SetCode transaction, the EIP-7702 transaction type) and an
+>   `authorizationList` whose single entry names chain `0x14a34` (84532) and address
+>   `0x63c0c19a282a1b52b07dd5a65b58948a07dae32b` — the same delegate the account's code points at.
+>
+> **2. The two intermediary addresses, each from the chain rather than from its shape.**
+>
+> - `0xC066ac5D385419B1A8c43A0E146fA439837a8B8c` → `eth_getCode` returns **`0x`**, zero bytes. It is
+>   an **EOA**. It was the `from` of the deposit transaction, so the account that paid for and
+>   submitted that transaction holds no code of its own; nothing in the chain data says more about it
+>   than that.
+> - `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3` → **11,503 bytes** of code, runtime starting
+>   `0x60806040…`. It is a **contract**, and it identifies itself: `NAME()` →
+>   `"DelegationManager"`, `VERSION()` → `"1.3.0"`. Its function selectors include
+>   `redeemDelegations(bytes[],bytes32[],bytes[])` (`0xcef6d209`), `getDelegationHash`, `ROOT_AUTHORITY`,
+>   `disableDelegation`, `enableDelegation`, `disabledDelegations`, `getDomainHash`, `pause`/`paused`,
+>   `NAME`, `VERSION` and `eip712Domain` — the MetaMask **Delegation Framework**'s manager, 1.3.0.
+>   (Independent check: the selector and event-signature lookups resolve to those names, and
+>   `etherscan.io/address/0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3` is labelled *MetaMask:
+>   Delegation Manager*.) The deposit transaction's `to` is this contract, and its input begins
+>   `0xcef6d209` — **`redeemDelegations`**, with three `bytes[]`-shaped offsets. So the transaction
+>   asked the delegation manager to redeem a delegation; it did not call the vault.
+> - Neither address is the connected account and neither is the vault. What the chain shows is that
+>   the call reached the vault **through** the delegation manager, from an account that had delegated
+>   its execution to `EIP7702StatelessDeleGator`.
+>
+> **3. The `Deposit` log decodes, and it explains the state change that was measured.** From
+> `cast receipt 0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751`
+> (`status 0x1`, block `0x2cc5348` = **46945096**, `from` `0xC066ac5D…`, `to` `0xdb9B1e94…`,
+> `type 0x4`, five logs). The vault's `Deposit(address indexed sender, address indexed owner,
+> uint256 assets, uint256 shares)` is `log[3]`, `address 0x7941438ee07bea4469ccd4bec583e9fb24037f35`:
+>
+> | Field | Raw value | Read as |
+> |---|---|---|
+> | `sender` | topic[1] `0x0000000000000000000000002ae746c0ff0295c2da1ac338656f247e9758e034` | **`0x2aE746C0ff0295c2da1aC338656F247e9758E034`** |
+> | `owner` | topic[2] `0x0000000000000000000000002ae746c0ff0295c2da1ac338656f247e9758e034` | **`0x2aE746C0ff0295c2da1aC338656F247e9758E034`** |
+> | `assets` | data first word `0x…000f4240` | **`1000000`** (1.0 USDC at 6 decimals) |
+> | `shares` | data second word `0x…0de0b6b3a7640000` | **`1000000000000000000`** (1e18 = 1 share) |
+>
+> So **yes**: `owner` **is** `0x2aE7…E034`, and `assets` **is** `1000000`. That is the check the
+> session was missing, and it closes the loop this file was previously unable to close: the deposit
+> really credited the account this workspace's key controls, for exactly the 1.0 USDC the allowance
+> had been raised by, and for 1 share — which is the 20 → 21 the account and the vault each moved.
+> Two answers from the same receipt corroborate it independently of the event: `log[1]` is USDC's
+> `Transfer` (`0xddf252ad…`) `0x2aE7…E034 → 0x7941438e…` of `0xf4240` = 1000000, and `log[2]` is the
+> vault's own share `Transfer` minting `0xde0b6b3a7640000` = 1e18 to `0x2aE7…E034` from the zero
+> address. `log[4]`'s topic[0] is the delegation manager's own redemption event, whose 4-byte lookup
+> is `RedeemedDelegation(address,address,(address,address,bytes32,(address,bytes,bytes)[],uint256,bytes))`
+> — the delegation manager saying so.
+>
+> **4. The approve transaction's hash, which the first amendment recorded as never identified.**
+> Topic-filtered `eth_getLogs` on USDC (`0x036CbD53842c5426634e7929541eC2318f3dCF7e`) for
+> `Approval(address indexed owner, address indexed spender, uint256 value)` with `owner` =
+> `0x2aE7…E034` and `spender` = the vault `0x7941438ee07bea4469ccd4bec583e9fb24037f35` returns
+> **exactly two** logs in blocks 46919124–46946111 (taken in ≤9,000-block windows: this endpoint caps
+> `eth_getLogs` at 10,000 blocks, measured — `-32614 eth_getLogs is limited to a 10,000 range`):
+>
+> | When | `transactionHash` | `blockNumber` | `value` |
+> |---|---|---|---|
+> | earlier | `0x1cb6d5dd76145f8d89eb4588bac64dd0c642162ef6cc605ccfd1b6c2bfaf9275` | **46919479** (`0x2cbef37`) | `20000000` |
+> | **the one whose result this session measured** | **`0xac558a4be8b234374e64a6be08fc9532fe2488f28dbc46cf495cfeeb7dd00ffc`** | **46945057** (`0x2cc5321`) | **`1000000`** |
+>
+> The second one is the allowance the measurement saw, and `cast receipt` on it says `status 0x1`,
+> `from 0x2ae746c0ff0295c2da1ac338656f247e9758e034`, `to 0x036cbd53842c5426634e7929541ec2318f3dcf7e`,
+> `type 0x2` (an ordinary transaction), one log — the `Approval` above. **That is a second transaction
+> type in the same session: this approve was a direct call from the account to the token, while the
+> deposit went through `0xdb9B1e94…` as a `0x4`.** The first row is recorded because it is the
+> difference between the two, and the file would otherwise imply the allowance was zero before: the
+> account had approved **20 USDC** at block 46919479, and the 20 → 21 deposit consumed that grant
+> (20 USDC is exactly its size). The grant this session's measurement observed is the later, separate
+> **1.0 USDC** approval, 2,578 blocks after it.
+>
+> **What this settles, and what it does not.** Settled, as measurements: the account carries a 7702
+> delegation to `EIP7702StatelessDeleGator` 1.3.0; the deposit reached the vault via the MetaMask
+> Delegation Manager's `redeemDelegations`; the vault's `Deposit` names that account as `sender` and
+> `owner` for `assets = 1000000` and `shares = 1e18`; and the erc20 approval that produced the
+> measured allowance is `0xac558a4b…` at block 46945057. Not settled, and named so that it is not
+> read as settled by anything above: **who or what submitted the two transactions.** The chain shows
+> the 7702 delegation being *used*, and shows it is not what *sent* the deposit — the deposit's
+> `from` has no code. Nothing in the data above establishes which program or wallet built either
+> transaction, and no rendered page was captured, so every row below that asserts *wording* remains
+> exactly as unmeasured as it was before this amendment.
 
 | # | Failure class | How it is injected | What is asserted (wording + rendered result + state) | Evidence requirement | Status |
 |---|---|---|---|---|---|
 | 1 | Wallet not installed | Open `/vault/manage` in a browser with no extension | `"No injected wallet was found in this browser. This app uses injected() …"`, and the deposit and redeem controls stay inert rather than accepting input that could never be signed | screenshot: **not run** | **implemented; interaction not measured** |
 | 2 | The user refuses to sign (`4001`) | Reject at the MetaMask prompt | A **neutral** line, never a red failure; the form returns to idle and says the user cancelled and nothing was signed. `mapWriteError` checks `4001` first so no later branch can reclassify it | screenshot: **not run** | **logic proven** (`test/wallet-flow.test.ts`: *a user rejection is its own phase, not a failure*, and the nested-cause case); **interaction not measured** |
 | 3 | Wrong chain | Wallet on chain 8453, page expecting 31337 | The controls are **disabled with a reason naming both chains** — *"Switch the wallet to chain 31337 — it is currently on chain 8453, where this deployment does not exist. Nothing is sent until it does."* — and **no wallet prompt appears** | screenshot: **not run** + transaction hash: **not applicable, nothing is sent** | **logic proven** (`decideDeposit` → `wrong-chain`, and it outranks an unparseable amount); **interaction not measured** |
-| 4 | Insufficient allowance | Fresh wallet, zero allowance, then deposit | The **approve step is offered instead of a deposit**; a deposit that would revert with `ERC20InsufficientAllowance` is never sent | screenshot: **not run** | **logic proven**, including the case where the allowance was consumed and must be re-read; **partly measured 2026-09-17** — a person deposited from a zero allowance and the chain now reports **`1000000`** (1.0 USDC) on the account named in the amendment above, so the approve really did run and change state. **The page's wording was not captured** and the approving transaction's hash was never identified, so the row's own claim about what the form *offers* is still unmeasured |
+| 4 | Insufficient allowance | Fresh wallet, zero allowance, then deposit | The **approve step is offered instead of a deposit**; a deposit that would revert with `ERC20InsufficientAllowance` is never sent | screenshot: **not run** | **logic proven**, including the case where the allowance was consumed and must be re-read; **partly measured 2026-09-17** — a person deposited from a zero allowance and the chain now reports **`1000000`** (1.0 USDC) on the account named in the amendment above, so the approve really did run and change state. **The approving transaction is now identified**: `0xac558a4be8b234374e64a6be08fc9532fe2488f28dbc46cf495cfeeb7dd00ffc`, block **46945057**, `Approval` value **`1000000`**, spender the vault, `from` the account itself (see the second amendment). **The page's wording was still not captured**, so the row's own claim about what the form *offers* remains unmeasured — the hash and the allowance are chain facts, not a measurement of this page |
 | 5 | Insufficient balance | Enter more than the wallet holds | The reason carries the **real balance, formatted** (`5555.0759` and the symbol), never the bare word "insufficient"; refused **before** any approval, because an approval needs no balance and approving first would spend gas to learn a free fact | screenshot: **not run** | **logic proven** (`decideDeposit` → `exceeds-balance`, and the balance check is asserted to win over the allowance check); **interaction not measured** |
 | 6 | Insufficient gas | Drain the wallet's ETH, then deposit | **No dedicated copy: this is a recorded gap.** The app does not pre-compute gas, so an under-funded wallet fails at the wallet or the node and that error arrives through the failure path | screenshot: **not run** | **not implemented as a pre-flight check**. **One such failure was observed verbatim on 2026-09-17** — `insufficient funds for gas * price + value: have 352712045842 want 898152800000` (see the amendment above) — which is evidence the error does reach the failure path. It is **not** evidence about what this app renders for it: the session left that failure's order and cause unresolved and captured no rendered text |
 | 7 | Transaction reverted | Force a revert, or deposit with an allowance that becomes insufficient | `"The chain reverted this transaction."` with the hash **kept** so it can be looked up, and viem's text in a collapsed `detail`. `mapReceipt` maps `'reverted'` to `failed` — **never** to `confirmed`, and never to still-pending | screenshot: **not run** + transaction hash: **not run** | **logic proven**; **interaction not measured** |
@@ -292,8 +400,8 @@ the console column means "the console errors and uncaught exceptions this page p
 | Step | Action | Assertion | Evidence | Status |
 |---|---|---|---|---|
 | 1 | Connect wallet | **Now applicable**: `/vault/manage` offers a connect control, and after connecting it shows the address and the wallet's chain rather than a dash. The connected branch **did render live on 2026-09-17** — a person connected a wallet to the published page and drove a deposit through it (see §5's amendment) — but **nothing captured that render**, so the row's assertion about what the page *shows* is still unmeasured. The 2026-09-16 runs exercised the no-wallet branch only | screenshot: **not run** | **implemented; the connection is confirmed by what followed it, the render is not captured** |
-| 2 | Approve | **Now applicable**: a deposit with an insufficient allowance offers the approve step first, and after the approval confirms the allowance is **re-read** rather than remembered | screenshot: **not run** | **logic proven**; **partly measured 2026-09-17** — the allowance moved **`0 → 1000000`** (1.0 USDC), so an approval really was sent and the chain shows its effect. **The approving transaction's hash was never identified**, and "re-read rather than remembered" is a statement about the UI that no capture covers |
-| 3 | Deposit | **Now applicable**: `deposit(uint256 assets, address receiver)` with the connected account as receiver. Would be evidenced by a **transaction hash, block number and `Deposit` event**, cross-checked against the chain's `totalAssets` before and after | screenshot: **not run**; transaction hash: **`0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751` (block 46945096)** | **measured 2026-09-17, on the chain**: the vault moved 20 USDC / 20 shares → **21 / 21**, the account in §5's amendment moved 20 → **21 shares**, and that transaction emitted the vault's `Deposit` event. **What it does not establish**: the transaction's `from` and `to` were neither the connected account nor the vault (so it went through an intermediary), the `Deposit` log's `owner` / `assets` / `shares` were not decoded, and no screenshot of the page was taken — see the amendment above for the open checks |
+| 2 | Approve | **Now applicable**: a deposit with an insufficient allowance offers the approve step first, and after the approval confirms the allowance is **re-read** rather than remembered | screenshot: **not run** | **logic proven**; **partly measured 2026-09-17** — the allowance moved **`0 → 1000000`** (1.0 USDC), so an approval really was sent and the chain shows its effect. **The approving transaction is now identified**: `0xac558a4be8b234374e64a6be08fc9532fe2488f28dbc46cf495cfeeb7dd00ffc` at block **46945057** (`0x2cc5321`), `status 0x1`, `from` the account, `to` the USDC contract, `type 0x2`, one log — `Approval(owner = 0x2aE7…E034, spender = 0x7941438e…, value = 1000000)`. That closes the gap this row recorded. What it does not close: "re-read rather than remembered" is a statement about the UI and **no capture covers it** |
+| 3 | Deposit | **Now applicable**: `deposit(uint256 assets, address receiver)` with the connected account as receiver. Would be evidenced by a **transaction hash, block number and `Deposit` event**, cross-checked against the chain's `totalAssets` before and after | screenshot: **not run**; transaction hash: **`0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751` (block 46945096)** | **measured 2026-09-17, on the chain, and the log now decodes**: the vault moved 20 USDC / 20 shares → **21 / 21**, the account in §5's amendment moved 20 → **21 shares**, and that transaction's vault `Deposit` names `sender` = `owner` = **`0x2aE746C0ff0295c2da1aC338656F247e9758E034`**, `assets` = **`1000000`**, `shares` = **`1000000000000000000`** — i.e. the event explains the state change exactly, for 1.0 USDC against the 1.0 USDC allowance. The vault still reads `totalAssets()` **`21000000`** and `totalSupply()` **`21000000000000000000`** (21 / 21). **What it still does not establish**: the transaction's `from` was an EOA with no code (`0xC066ac5D…`) and its `to` was the MetaMask Delegation Manager contract (`0xdb9B1e94…`, `redeemDelegations`), **not** the vault — so the deposit reached the vault through a delegation redemption, from a submitter the chain data does not name; and **no screenshot of the page was taken** — see the two amendments above |
 | 4 | Redeem | **Now applicable**: `redeem(uint256 shares, address receiver, address owner)`, one transaction with no approval | screenshot: **not run** + tx hash: **not run** | **implemented; interaction not measured** |
 | 5 | **The page reading exactly equals the chain** | **Applicable and already run**: the assertion reads anvil's `eth_call totalSupply()` (`0x18160ddd`) and compares it with the **share string on the rendered page**. Precision handling: the chain holds a raw uint256, the page holds a decimal string with trailing zeros stripped, and the two are made equivalent through `formatBaseUnits` | **Passed**. Measured: chain `859021905704231281673` ↔ page `859.021905704231281673`. (This row previously printed the chain value as `859021905704281673` — 18 digits, missing `4231`. The raw evidence and a live `eth_call` both give 21 digits; a truncated figure inside a row about exact equality was the worst possible place to have one) | `totalSupply rendered as SHARES…` in `docs/evidence/browser-assert.txt` | **Passed** |
 
@@ -341,7 +449,7 @@ the console column means "the console errors and uncaught exceptions this page p
 ## 8. The G-F4 gate
 
 - [x] all four layers L1–L4 have a report; L2 is a **real browser** (the user's real Chrome driven by kimi-webbridge, not jsdom)
-- [ ] **none of §5's 11 rows is `not run`** — **NOT SATISFIED as of 2026-09-16, and still not satisfied after 2026-09-17.** Rows 9, 10 and 11 are passed by measurement; rows 1, 2, 3, 5, 7 and 8 have `logic proven` pre-flight decisions and **no measured interaction at all**; row 6 is **not implemented as a pre-flight check** (though one real insufficient-funds error was observed — see §5's amendment); row 8 has **no dedicated state**. **Row 4 and §6's step 2/3 changed on 2026-09-17**: a person drove the published wallet page, and the chain confirms the allowance moved `0 → 1000000` and the vault and the account both moved 20 → 21, with the `Deposit` event on a named transaction — but no screenshot and no decoded log came out of it, so the rows are marked `partly measured` rather than passed, and the amendment in §5 lists what is still open
+- [ ] **none of §5's 11 rows is `not run`** — **NOT SATISFIED as of 2026-09-16, and still not satisfied after 2026-09-17.** Rows 9, 10 and 11 are passed by measurement; rows 1, 2, 3, 5, 7 and 8 have `logic proven` pre-flight decisions and **no measured interaction at all**; row 6 is **not implemented as a pre-flight check** (though one real insufficient-funds error was observed — see §5's amendment); row 8 has **no dedicated state**. **Row 4 and §6's step 2/3 changed on 2026-09-17**: a person drove the published wallet page, and the chain confirms the allowance moved `0 → 1000000` and the vault and the account both moved 20 → 21, with the `Deposit` event on a named transaction. **Which of that session's gaps are now closed, and which are not** (second amendment, same day): the decoded `Deposit` log, the approving transaction's hash, and what the two intermediary addresses are were all measured — so "no decoded log came out of it" is no longer true — but **no screenshot and no rendered-text capture exist for any wallet row**, which is why the rows stay `partly measured` rather than passed
 - [x] every failure case **that has been run** has a screenshot — `scenario-9-chain-down.png`,
       `scenario-10-index-down.png`, `scenario-11-data-freshness.png`, and for the history page
       `scenario-12-history-up.png` (three tables, each stating how much it is showing) and
@@ -362,6 +470,14 @@ confirms (§5's amendment). What they still need is a **capture** — a screensh
 transaction's hash, the decoded `Deposit` log, and an account of how the deposit's `from` and `to`
 came to be neither the connected account nor the vault — before any of them can be called passed. Row 6
 (insufficient gas) is untouched as a pre-flight gap, and rows 1, 2, 3, 5, 7 and 8 remain unmeasured.
+
+**That paragraph is kept as written, because two of the four things it lists were measured later the same
+day.** The `Deposit` log now decodes (`owner` = `0x2aE7…E034`, `assets` = `1000000`, `shares` = `1e18`), the
+approving transaction is `0xac558a4b…` at block 46945057, and the two intermediaries are settled from the
+chain: `0xC066ac5D…` is an EOA with **no code**, and `0xdb9B1e94…` is the MetaMask **DelegationManager** 1.3.0
+that the deposit called (`redeemDelegations`). What the paragraph is still right about is the capturing: the
+verdict **remains NOT passed**, now for one reason only — **no screenshot and no rendered-text capture of any
+wallet row**, plus rows 1, 2, 3, 5, 6, 7 and 8 as before. §5's second amendment is the measurement.
 
 **What is genuinely proven.** 51 browser assertions pass against the **production build** (not just the dev
 server), and they are re-runnable with one command: `node tools/browser-assert.mjs --url http://127.0.0.1:3121`.
@@ -413,6 +529,17 @@ explanation of why the deposit's `from` and `to` were neither the connected acco
 without a captured interface is a measurement of the **chain**, not of **this page**, and this file does not
 count one as the other.
 
+**The reason narrowed again later on 2026-09-17, and this time three of the four items it names are gone.**
+The "no identified hash for the approve" and "no decoded `Deposit` log" items were both measured (the approve
+is `0xac558a4b…`, block 46945057; the log decodes to `owner = 0x2aE7…E034`, `assets = 1000000`,
+`shares = 1e18`), and "why the deposit's `from` and `to` were neither the connected account nor the vault" is
+now an answer rather than a question: the account carries an **EIP-7702 delegation** (`0xef0100` + the
+`EIP7702StatelessDeleGator` at `0x63c0c19a…`), and the deposit called the MetaMask **DelegationManager**'s
+`redeemDelegations`. What is left, and it is the whole of the remaining reason: **nothing captured the page.**
+No screenshot, no rendered text, no `browser-assert.mjs` run behind the two transactions — so a state change
+that is now fully explained on the chain is still **not** a measurement of this interface. The verdict does not
+move, and the reason it does not move is narrower than it was.
+
 **Residual gaps recorded honestly** (they are separate from the wallet gap above):
 - end of §7: **console events are not captured directly**. kimi-webbridge's `evaluate` cannot look back at console
   output that already happened, so the substitute evidence is "assert that the page text carries no error and no hydration hint".
@@ -423,3 +550,9 @@ count one as the other.
 > unmeasured — the note at the end of §6 above carries the correction, because an earlier version of this line
 > still said steps 1–4 were not applicable after §6's table had begun to say "Now applicable";
 > of I4's four classes, two rows are not applicable and two are **not run** (they share their origin with rows 9 and 10 in §5).
+>
+> **Addendum, later on 2026-09-17**: I3's step 3 now has its decoded event and its named intermediaries, and
+> step 2 has its approving transaction — see §5's second amendment. Step 3's remaining gap is **the page
+> capture, not the chain**: what it lacks is a screenshot of the interface, not evidence of the deposit. It is
+> therefore still `partly measured`, and calling it `passed` on chain evidence alone is exactly the substitution
+> §8 refuses.
