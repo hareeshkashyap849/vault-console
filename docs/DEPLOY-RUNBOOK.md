@@ -21,7 +21,7 @@
 > **The vault is deployed and unfunded**: `totalAssets` and `totalSupply` are 0, and it has no events. That
 > is stated here rather than left to be discovered, and the deployment record says it too.
 >
-> **Step 4 was verified end to end without a host.** The console was built with the exact variables Vercel
+> **Step 4 was verified end to end without a host (2026-09-16, server build).** The console was built with the exact variables Vercel
 > will use — `VAULT_DEPLOYMENT=deployments/base-sepolia.json` (a copy inside this repository, because a
 > host has no sibling checkout), `VAULT_RPC=https://sepolia.base.org`, and **no index service** — and it
 > rendered:
@@ -34,8 +34,15 @@
 > Then     The index service could not be read. (names the URL and says it is a separate process)
 > ```
 >
+> **That transcript is kept as the record of what was measured, with one line now out of date**: it
+> comes from the **server-built** console, where a failed index read produced "the index service could
+> not be read". The console is a **static export** as of 2026-09-17 (`STATIC-EXPORT-MIGRATION.md`, beside this file),
+> `indexApiUrl` is `null` on a static host, and the same panel now reports that the **page has no route
+> to the index service** and makes no request at all. The addresses, chain and `Now` line above are
+> unaffected — the record they came from is still the single source.
+>
 > So the `Now` panel reads the real deployed vault from the real chain, and the `Then` panel fails
-> honestly because nothing hosts the index. Putting this on Vercel is now a matter of the account, not of
+> honestly because nothing hosts the index. Shipping it is now a matter of the account, not of
 > the code.
 >
 > **What the real deployment found, which no local run could.** The indexer crashed on its first block
@@ -136,8 +143,9 @@ console output, because the console is easy to mistype and the JSON is what the 
 
 `deployments/base-sepolia.json` follows the shape of the sibling repository's
 `../../erc4626-vault/deployments/local.json`, because three
-programs read it: the indexer (for its start block), the console's server components (for the
-address), and `next.config.ts` at build time (for the chain id it hands to the browser).
+programs read it: the indexer (for its start block, from `deployBlock`), the console — through
+`web3-development-execute/projects/vault-console/scripts/build-runtime-config.mjs`, which turns the record into the browser's `public/api/config` at
+build time — and `next.config.ts` at build time (for the chain id it hands to the browser).
 
 ```json
 {
@@ -169,14 +177,20 @@ on the vault, and the asset's `decimals()` and `symbol()`.
 **This step exists because the mistake already happened once, in the documentation.** An earlier
 version of `deployments/README.md` documented the testnet record with `address` where the console reads
 `vault`, and with `asset` as an object where the console reads a string. Nothing had been deployed, so
-nothing caught it; the first real deployment would have produced a record that `loadDeployment()`
-refuses — at the end of the process, after the gas was spent. Running the validator against that old
+nothing caught it; the first real deployment would have produced a record that the console refuses —
+at the end of the process, after the gas was spent. **What performs that refusal changed on
+2026-09-17, and the check did not get weaker**: it used to be `loadDeployment()` at request time
+(deleted in the static export — `STATIC-EXPORT-MIGRATION.md`, beside this file), and it is now
+`web3-development-execute/projects/vault-console/scripts/build-runtime-config.mjs` at build time, which validates `vault` / `asset` / `chainId` /
+`deployBlock` and exits before writing a config, plus `src/lib/runtimeConfig.ts`, which re-validates
+the file the browser got back. Running the validator against that old
 format produces seven specific failures, including one that names the rename
 (`the record does not use "address" where the readers expect "vault"`).
 
 **A SECOND HAZARD, FOUND BY THE REAL DEPLOYMENT: the record is read by three programs, and all three
 must be given the SAME one.** The indexer, the API and the console each resolve it separately
-(`DEPLOYMENT_RECORD`, `VAULT_DEPLOYMENT`, and a module that reads the file directly), and getting one
+(`DEPLOYMENT_RECORD`, `VAULT_DEPLOYMENT`, and — for the console, since the static export — the
+`--record` flag of the config generator, whose output the browser reads), and getting one
 wrong does not produce an error — it produces a service that reports a different vault than the one it
 indexed. Measured: an API started with the right database and the wrong record answered
 `chainId: 31337` with the *local* vault address while serving a Base Sepolia index, and `/api/price`
@@ -216,7 +230,8 @@ fork events — and `/api/price` answered `503 share decimals are unknown`, beca
 Two things are worth keeping from that:
 
 1. **Every component that reads the vault must be given the same record.** The indexer, the API and the
-   console each resolve it separately (`DEPLOYMENT_RECORD`, `VAULT_DEPLOYMENT`), and getting one of them
+   console each resolve it separately (`DEPLOYMENT_RECORD`, `VAULT_DEPLOYMENT`, and the console's
+   generator `--record` flag), and getting one of them
    wrong does not produce an error — it produces a service that reports a different vault than the one
    it indexed. On the real deployment there is one record and one set of variables, and this is the
    failure to check for first.
@@ -241,29 +256,33 @@ whose `deployBlock` is real.
 
 **To fill in when it runs**: swaps indexed, the block range, and the indexer's own report.
 
-## Step 4 — the front end on Vercel
+## Step 4 — the front end: a static export, not a Vercel server
 
-The console reads its upstreams from environment variables, so the same build runs against local
-services or public ones with no code change:
+**This step's shape changed on 2026-09-17, and this section is what it looks like now.** The console
+is published as a **static export** (`STATIC_EXPORT=1 next build`) on GitHub Pages, so there is no
+server to read environment variables at request time. The upstreams are decided **at build time** by
+`web3-development-execute/projects/vault-console/scripts/build-runtime-config.mjs`, which writes the browser-readable `public/api/config`:
 
-| Variable | Value on Vercel | Why it is needed |
+| Input | Value for the published build | Why it is needed |
 |---|---|---|
-| `VAULT_DEPLOYMENT` | `deployments/base-sepolia.json` (committed in this repository) | Vercel has no sibling `erc4626-vault` checkout, and the record is read at request time, not copied into source |
-| `NEXT_PUBLIC_VAULT_CHAIN_ID` / `_CHAIN_NAME` | derived by `next.config.ts` from that record | the wallet config is browser code and cannot read a file, so the chain id crosses at build time |
-| `VAULT_RPC` | `https://sepolia.base.org` | server-side chain reads |
-| `VAULT_API` | the index service's public URL, if one is hosted | server-side index reads |
+| `--record deployments/base-sepolia.json` | the record committed in this repository | the published host has no sibling `erc4626-vault` checkout. The generator **fails the build** on a record missing `vault` / `asset` / `chainId` / `deployBlock` |
+| `--rpc https://sepolia.base.org` | the chain the **browser** reads | chain reads happen in the browser now, and `process.env.VAULT_RPC` in a bundle is `undefined` — a fallback there would silently read the wrong chain |
+| `--index null` | no index service | `null` is a value, not a gap: the panels say the page has no route to the index service (`no-route`) and make **no request**, instead of reporting a service they never asked |
+| `NEXT_PUBLIC_BASE_PATH=/<repo>` | the GitHub Pages project subpath | Next rewrites `<Link>` and the router for a `basePath`; it cannot rewrite a `fetch` written by hand, so the config loader adds it itself (`src/lib/runtimeConfig.ts`) |
+| ~~`VAULT_DEPLOYMENT`~~ · ~~`NEXT_PUBLIC_VAULT_CHAIN_ID` / `_CHAIN_NAME`~~ · ~~`VAULT_API`~~ | **all three retired** | nothing in `src/` reads them: the record path is the generator's `--record` flag, the chain identity comes from the generated config (`src/lib/wagmi.ts` builds the wallet config from it), and the index URL is the config's `indexApiUrl`. `VAULT_RPC` / `VAULT_API` still configure the **dev server's** rewrites in `next.config.ts`, which is why the scenario scripts use them — a static host has no rewrite |
 
 **The one real design question in this step.** On a public deployment the chain is reachable but the
-index service is not, unless something hosts it. The console is built for exactly that case and will
-render its `Then` panel as "the index service could not be read" with the `Now` panel still exact —
-which is honest, and is also a page whose best feature is missing. There are three answers, and the
+index service is not, unless something hosts it. The console is built for exactly that case: the
+published page reports that it has **no route** to the index service, with the `Now` panel still
+exact — which is honest, and is also a page whose best feature is missing. There are three answers, and the
 choice should be made explicitly rather than by omission:
 
-1. **Host the index service too** (Render's free instance, as the swap indexer does). The whole
-   system is public and the local-index failure path is the only thing that shows.
-2. **Ship a committed snapshot** of the index output and label it as a snapshot with its capture
-   time. Cheaper, and it puts a fabricated-looking number on a page whose entire argument is that
-   figures carry their provenance — so the label has to be impossible to miss.
+1. **Host the index service too.** Then point `--index` at it (an absolute URL) and rebuild, so the
+   whole system is public and only the genuine index-down path shows.
+2. **Ship a committed snapshot** of the index output and point `--index` at it, labelled as a
+   snapshot with its capture time. Cheaper, and it puts a fabricated-looking number on a page whose
+   entire argument is that figures carry their provenance — so the label has to be impossible to miss.
+   `STATIC-EXPORT-MIGRATION.md`, beside this file, records this as the natural next step.
 3. **Show only what the chain supports**: link to the console but stand the wallet page at the
    front. Fewer moving parts, and a smaller claim.
 

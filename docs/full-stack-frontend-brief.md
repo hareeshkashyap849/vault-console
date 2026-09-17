@@ -1,7 +1,9 @@
 # Full-stack front end: verified facts and decisions
 
 > **STATUS: carried out.** All four routes exist, all three read-only pages take the same
-> `force-dynamic` / `no-store` route, and the values in §2 were re-checked against the installed
+> `staleTime: 0` / `refetchOnWindowFocus` route — the pages are client components in a **static
+> export** now, so the journey this brief was written against (`force-dynamic` / `no-store` on the
+> server) was replaced rather than kept (`STATIC-EXPORT-MIGRATION.md` (beside this file)) — and the values in §2 were re-checked against the installed
 > packages and the running services rather than trusted from this document. What was measured:
 >
 > | Claim | Evidence |
@@ -67,8 +69,15 @@ asset 0x5FbDB2315678afecb367f032d93F642f64180aa3
 owner 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720
 ```
 
-`src/lib/deployment.ts` already loads this and throws loudly on a partial record. Extend it; do
-not bypass it.
+The addresses are no longer loaded by a module that reads the record at request time —
+`src/lib/deployment.ts` did that, and it was deleted in the static export
+(`STATIC-EXPORT-MIGRATION.md`, beside this file). What replaces it is the same rule with the read moved:
+`web3-development-execute/projects/vault-console/scripts/build-runtime-config.mjs` reads this record at **build** time and writes
+`public/api/config`, and `src/lib/runtimeConfig.ts` is the only module that reads that file. The
+generator validates the record before it writes (`vault` / `asset` / `chainId` / `deployBlock`) and
+re-reads its own output to compare before reporting success, so a partial record stops the build
+instead of producing a page that addresses no contract. **Keep the rule the old module existed for:
+the addresses must never be copied into source.**
 
 ### The contract's write paths
 

@@ -25,12 +25,25 @@ All four need a server at request time, and a static host runs none.
 
 `src/lib/deployment.ts` was deleted: nothing imported it, and a module that reads the record
 per request contradicts the architecture. Its reasoning lives on in
-`src/lib/runtimeConfig.ts` and `scripts/build-runtime-config.mjs`.
+`src/lib/runtimeConfig.ts` and `web3-development-execute/projects/vault-console/scripts/build-runtime-config.mjs`.
 
 ## Superseded statements, by file and line
 
 Correct content in every case: **the pages are client components, and the record is read
 through the generated runtime config instead of per request.**
+
+> **The line numbers below are as of the commit that wrote this file, and they have drifted** --
+> the correction pass shifted them and found more rows than this table listed. **Search for the
+> text, not the number.** Rows that pass also corrected, which this table never named:
+> `EVIDENCE-MAP.md` 54; `STATE-OWNERSHIP.md` 77, 85, 86, 132; `INVARIANTS.md` 40, 46;
+> `FRONTEND-SPEC.md` 87, 102, 163-165; `SUPPORT-AND-SIGNOFF.md` 35, 132; `TEST-DOUBLES.md` 82;
+> `docs/DEPLOY-RUNBOOK.md` 24, 191, 233, 257-288.
+>
+> Three categories were left deliberately, and are listed here rather than quietly fixed:
+> `SUPPORT-AND-SIGNOFF.md` §5's dated verdicts and `BROWSER-TEST-PLAN.md` still record `passed`
+> against the server-rendered pages and have not been re-measured; the comment headers of
+> `src/lib/endpoints.ts` and `src/lib/chain.ts` were stale at the time of writing and are handled
+> in a later pass; and the 51 browser assertions have not been re-run against the export.
 
 | File | Lines | What is stale |
 |---|---|---|
@@ -42,7 +55,7 @@ through the generated runtime config instead of per request.**
 | `SUPPORT-AND-SIGNOFF.md` | 182 | the resolved `force-dynamic` sign-off row |
 | `TEST-DOUBLES.md` | 85 | "`force-dynamic` takes effect: no evidence, no double" |
 | `projects/vault-console/docs/DEPLOY-RUNBOOK.md` | 139, 172 | "the console's server components" read the record |
-| `docs/full-stack-frontend-brief.md` | 4, 70 | the same, in the work order |
+| `web3-development-execute/projects/vault-console/docs/full-stack-frontend-brief.md` | 4, 70 | the same, in the work order |
 
 ## What is still proven, what is not, and what is new
 

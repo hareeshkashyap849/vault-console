@@ -79,14 +79,17 @@ The template requires: **no "claim about the real chain" may be supported by a d
 | the interface's reading equals the on-chain value | a real browser + the real anvil `eth_call` (`browser-assert.mjs`) | **No** |
 | coordinates under real rendering are not NaN | a real browser reading the SVG attributes of the rendered DOM | **No** |
 | the service response's real field names and shape | live re-fetch (`contract-live.test.ts`, `api-against-real-service.test.ts`) | **No** |
-| the page's server-side render returns 200 | a real HTTP request (`fetch(PAGE)`) | **No** |
+| the page answers 200 over HTTP, and the HTML is not an error page | a real HTTP request (`fetch(PAGE)`) in `browser-assert.mjs` | **No** |
+| the page's own JavaScript really reads `api/config` and the chain — **not** what it reads on the server | `browser-assert.mjs` drives a real browser; the static export has no server-side render to assert against, and the 51 assertions written for the server-rendered pages have **not been re-run against the export** (`docs/STATIC-EXPORT-MIGRATION.md`, "Also not done") | **No**, but also **not yet re-measured for the export** |
 | `fetch` failures are split into three classes | the double (`stubFetch`) + the comparison against a real 4xx | **No** (there is a comparison) |
 | `cache: 'no-store'` really is sent | the double captures the `init` object | **Yes — supported by a double alone**. Explicitly marked "partly unverified", with real-environment check steps given |
-| `dynamic = 'force-dynamic'` takes effect | **no evidence** | **Yes — it does not even have a double**. Recorded in `EVIDENCE-MAP.md` §3 |
+| ~~`dynamic = 'force-dynamic'` takes effect~~ | **RETIRED 2026-09-17 — and it now has an assertion, which is not the same as the evidence it had.** The mechanism is gone: the pages are client components in a static export and no longer export `dynamic = 'force-dynamic'` (`docs/STATIC-EXPORT-MIGRATION.md`). What covers "nothing between the reader and the service is cached" instead: the `no-store` row above (a unit test, **supported by a double alone**) plus `staleTime: 0` / `refetchOnWindowFocus: true` in the `QueryClient`'s `defaultOptions` (`src/app/providers.tsx`) and four `useQuery` reads in `src/app/vault/page.tsx` | **No — and no longer "no evidence" either**. It is structural (a configuration in the source) plus the double-backed `no-store` row. The 2026-09-16 measurement that used to stand here (scenario 11, a before/after pair against the running server) measured a mechanism that no longer exists, so it is **not** evidence for the current code |
 
 > Both claims supported only by a double (or with no evidence at all) are called out in the table
-> above, and neither one is written as "verified". The second of them has neither a double nor an
-> assertion, just one line of declaration in the source code.
+> above, and neither one is written as "verified". The second row changed shape on 2026-09-17: the
+> `force-dynamic` declaration it was about is gone, and what replaced it is the `no-store` unit test
+> above plus a setting in the source — **a weaker form of evidence than the measurement it replaced,
+> and marked as such rather than counted as an improvement** (`docs/STATIC-EXPORT-MIGRATION.md`).
 
 ---
 
