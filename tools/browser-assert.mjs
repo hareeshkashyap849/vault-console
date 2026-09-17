@@ -100,8 +100,9 @@ try {
   process.exit(1);
 }
 const html = await pageRes.text();
-check('page answers 200 (a 500 here was the original server-side bug)', pageRes.status === 200, `HTTP ${pageRes.status}`);
-check('server-rendered HTML is not the error page', !html.includes('Internal Server Error'), `${html.length} bytes`);
+// Fetched without a browser: these two are about the HTTP response and the document served.
+check('the page URL answers 200', pageRes.status === 200, `HTTP ${pageRes.status}`);
+check('the served HTML is not a framework error page', !html.includes('Internal Server Error'), `${html.length} bytes`);
 
 // ---- 2. drive the real browser ----------------------------------------------------------
 

@@ -106,7 +106,7 @@ What is written into the code is **not** evidence.
 | Semantic landmarks | `<main>` / `<header>` / `<section>` / `<footer>` / `<dl>/<dt>/<dd>` / `<figure>/<figcaption>` | **untested** (written in, but how assistive technology renders it was never verified) |
 | The chart's alternative text | `role="img"` + `aria-label`, whose content is "169 candles of 60 seconds, from 1.1 to 1.1 USDC. Latest close 1.1. The price did not move in this window." | **untested** |
 | Colour contrast | dark background + `slate-100`/`slate-400`/`slate-500` text. `slate-500` (`#64748b`) on `slate-950` **may not reach WCAG AA's 4.5:1** | **untested, with a specific suspicion** — this one is not "not measured", it is "by the rule-of-thumb values common tools use, it may not pass". No conclusion is written before a tool has measured it |
-| Keyboard reachability | the page **has no interactive controls** (no button, no input, no link), so there is no tab-order problem; the candle tooltip is a `<title>`, **reachable neither by keyboard nor by touch** | **untested**, and the tooltip's reachability is **known to be limited** |
+| Keyboard reachability | the page **has interactive controls**, and the claim that it had none was simply wrong: the layout puts a four-link `<nav>` on every route, and `/vault/manage` carries two forms with fields and buttons. So there **is** a tab order, and **no route has had a keyboard pass**; the console panels' own contents still hold no button or field, and the candle tooltip is a `<title>`, **reachable neither by keyboard nor by touch** | **untested**, and the tooltip's reachability is **known to be limited** |
 | Reduced-motion preference | there is no animation, so `prefers-reduced-motion` does not apply | **Not applicable + reason** |
 | Text scaling | Tailwind relative units are used (`text-lg` and so on) | **untested** |
 
@@ -115,6 +115,8 @@ What is written into the code is **not** evidence.
 > It is corrected here to the measured values. In a document whose whole purpose is that claims match evidence,
 > a wrong count is not a typo: it is the failure mode the document exists to prevent.)
 > Writing "accessibility support is implemented" would be exactly the kind of record this project's discipline forbids.
+>
+> **The "no interactive controls" row was true when it was written, and stopped being true the same day.** It dates from 2026-09-16, when this app was one page and that page really did hold no button, no field and no link. Later on 2026-09-16 the nav, the wallet page and the history page arrived — four links on every route since, and two forms on the wallet page — so the row was already false **before** the static export (2026-09-17), and the export is not what falsified it. It is corrected above rather than deleted, because a row that said "there is nothing to check here" is the one row a reader would trust without looking.
 
 ---
 
@@ -145,6 +147,8 @@ Each row copies the wording out of the implementation verbatim and checks whethe
 > This workspace is a portfolio and **has no external client**. The template requires "the client confirms the F1 statements one by one";
 > this project **cannot** do that, and does not write a self-assessment as a client signature — that would be a record this project's discipline forbids.
 > The header states the verification method, so a reader can judge the weight of each piece of evidence themselves.
+>
+> **Every verdict below was measured against the server-rendered pages, before the static export, and none has been re-measured for the published site** — the `browser-assert.txt` runs it cites have not been repeated since the pages became client components (`docs/STATIC-EXPORT-MIGRATION.md`).
 
 | F1 id | Acceptable statement (summary) | Verification method | Where the evidence is | Status | Signed (who / when) |
 |---|---|---|---|---|---|

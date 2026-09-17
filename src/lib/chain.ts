@@ -18,10 +18,18 @@ import { createPublicClient, http, parseAbi } from 'viem';
  *
  * THE TRANSPORT URL IS ABSOLUTE, AND THAT IS NOT A STYLE CHOICE
  *
- * These reads run on the SERVER. The first version pointed the transport at `/rpc` and
- * relied on the rewrite in `next.config.ts`; on the server that throws
- * `TypeError: Failed to parse URL`, and the resulting 500 named `/rpc` as though the
- * endpoint were unhealthy. `endpoints.ts` holds the rule and the reason.
+ * These reads run in the BROWSER. They used to run on the server, where the first version
+ * pointed the transport at `/rpc` and relied on the rewrite in `next.config.ts`: on the server
+ * that throws `TypeError: Failed to parse URL`, and the resulting 500 named `/rpc` as though the
+ * endpoint were unhealthy.
+ *
+ * The absolute requirement outlived the move, for a different reason. A browser has no
+ * request-time environment, so there is no `VAULT_RPC` for the page to read, and on a static
+ * host there is no server in front of it to turn a path into the real service -- a relative
+ * `/rpc` would be answered by whatever serves the HTML, not by a node. So the endpoint arrives
+ * as an already-absolute string from the runtime config, which is generated from the same
+ * deployment record the addresses come from. `readDeployment` below is where that is spelled
+ * out; `./endpoints.ts` still holds the two defaults, but only the tests read it now.
  *
  * WHY THE WRITE PATHS AND THE ALLOWANCE READS LIVE IN THIS FILE TOO
  *

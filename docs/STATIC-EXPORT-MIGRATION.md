@@ -37,13 +37,24 @@ through the generated runtime config instead of per request.**
 > text, not the number.** Rows that pass also corrected, which this table never named:
 > `EVIDENCE-MAP.md` 54; `STATE-OWNERSHIP.md` 77, 85, 86, 132; `INVARIANTS.md` 40, 46;
 > `FRONTEND-SPEC.md` 87, 102, 163-165; `SUPPORT-AND-SIGNOFF.md` 35, 132; `TEST-DOUBLES.md` 82;
-> `docs/DEPLOY-RUNBOOK.md` 24, 191, 233, 257-288.
+> `web3-development-execute/projects/vault-console/docs/DEPLOY-RUNBOOK.md` 24, 191, 233, 257-288.
 >
-> Three categories were left deliberately, and are listed here rather than quietly fixed:
+> Two categories were left deliberately, and are listed here rather than quietly fixed:
 > `SUPPORT-AND-SIGNOFF.md` §5's dated verdicts and `BROWSER-TEST-PLAN.md` still record `passed`
-> against the server-rendered pages and have not been re-measured; the comment headers of
-> `src/lib/endpoints.ts` and `src/lib/chain.ts` were stale at the time of writing and are handled
-> in a later pass; and the 51 browser assertions have not been re-run against the export.
+> against the server-rendered pages and have not been re-measured, and the 51 browser assertions
+> have not been re-run against the export. The comment headers of `src/lib/endpoints.ts` and
+> `src/lib/chain.ts` were fixed in the pass after this one, along with the labels of two assertions
+> in `tools/browser-assert.mjs`, the message in `tools/sync-deployment-record.mjs`, and a false
+> claim in `SUPPORT-AND-SIGNOFF.md` that the page had no interactive controls (it was falsified the
+> day it was written, by the commit that added the nav and the wallet page -- **not** by the export).
+>
+> Still stale after all of those, found and not yet fixed: the header comment in
+> `src/app/layout.tsx` (it still says `/vault` and `/history` are server components),
+> `src/app/providers.tsx`'s own note about `page.tsx`, the header of
+> `scripts/build-runtime-config.mjs` (present tense about the deleted `deployment.ts`), the name of
+> one test in `test/api.test.ts` ("on the server"), and one dead arm of the `showsDeployment`
+> assertion in `tools/browser-assert.mjs` (it matches the deleted loader's message; the live
+> failure text is `Providers`' own).
 
 | File | Lines | What is stale |
 |---|---|---|

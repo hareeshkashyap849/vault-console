@@ -77,4 +77,13 @@ console.log(`  chain        ${copied.chainId}  (${copied.chainName ?? 'unnamed'}
 console.log(`  deployBlock  ${copied.deployBlock}`);
 console.log(`  sourceCommit ${copied.sourceCommit ?? 'not recorded'}`);
 console.log('');
-console.log('On the host set:  VAULT_DEPLOYMENT=deployments/base-sepolia.json');
+// `VAULT_DEPLOYMENT` was how a SERVER found this file at request time. There is no server any
+// more: nothing reads that variable (the pages are client components, and the addresses reach
+// the browser through the generated config), so the record is BUILD INPUT. The Pages workflow
+// is what turns it into that config, in the step before the export runs.
+console.log('Nothing on the host reads VAULT_DEPLOYMENT any more -- the record is build input.');
+console.log('The Pages workflow generates the browser\'s config from it with:');
+console.log(`  node scripts/build-runtime-config.mjs --record ${relative(project, target).replace(/\\/g, '/')} \\`);
+console.log('    --rpc https://sepolia.base.org --index null --out public/api/config');
+console.log('(`--index null` is deliberate: a static host runs no process, so the panels say this page');
+console.log('has no route to the index service rather than blaming a service it never asked.)');
