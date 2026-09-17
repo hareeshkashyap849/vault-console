@@ -192,17 +192,48 @@ The vault implements `ERC4626` and `Ownable` and does not inherit OpenZeppelin's
 is consistent with the source ([`YieldVault.sol`](web3-development-execute/projects/erc4626-vault/src/YieldVault.sol)
 is 147 lines, of which the vault's own logic is `reportYield` and `_decimalsOffset`).
 
-An earlier version of the deployment record's ABI omitted five selectors that the bytecode does
-contain — `transferFrom(address,address,uint256)` (`0x23b872dd`), `name()` (`0x06fdde03`),
-`symbol()` (`0x95d89b41`), `asset()` (`0x38d52e0f`) and `maxDeposit(address)` (`0x402d267d`). All
-five were called and all five answer: `name()` → `"Yield Vault Share"`, `symbol()` → `"yvSHARE"`,
-`asset()` → `0x036CbD53842c5426634e7929541eC2318f3dCF7e`, `maxDeposit(0x2aE7…E034)` →
+> **Correction, added after this document was first published, and left visible rather than deleted.
+> The paragraph that stood here claimed the deployment record's ABI omitted five selectors the
+> bytecode contains. That claim was WRONG, the record is complete, and the error was mine — a
+> mislabelling, not a reading of the record.** When `cast selectors` printed the dispatch table it
+> printed a selector on the left and an argument list on the right, and the argument lists for the
+> five shapes that share one argument count — `maxMint(address)`, `maxWithdraw(address)`,
+> `maxRedeem(address)`, `previewMint(uint256)` and `previewWithdraw(uint256)` — were paired with
+> selectors one position away from their own. Five wrong names, then, and "five names I cannot find
+> in the ABI" followed from the wrong names rather than from the ABI.
+>
+> **The check that settles it, and should have been run before the claim was written.** Compute
+> `keccak` of each signature the bytecode *claims* and see whether it equals the selector next to it:
+>
+> | Selector in the bytecode | The name it was given here | `cast sig` of that name | `cast sig` of the *other* candidate |
+> |---|---|---|---|
+> | `0x0a28a477` | `previewMint(uint256)` | `0xb3d7f6b9` — **differs** | `previewWithdraw(uint256)` → `0x0a28a477` — matches |
+> | `0xb3d7f6b9` | `maxMint(address)` | `0xc63d75b6` — **differs** | `previewMint(uint256)` → `0xb3d7f6b9` — matches |
+> | `0xc63d75b6` | `maxWithdraw(address)` | `0xce96cb77` — **differs** | `maxMint(address)` → `0xc63d75b6` — matches |
+> | `0xce96cb77` | `maxRedeem(address)` | `0xd905777e` — **differs** | `maxWithdraw(address)` → `0xce96cb77` — matches |
+> | `0xd905777e` | `previewWithdraw(uint256)` | `0x0a28a477` — **differs** | `maxRedeem(address)` → `0xd905777e` — matches |
+>
+> Every row's last column matches. A selector is the first four bytes of the keccak of its
+> signature, so a selector that matches a name is that name; five selectors that match under their
+> correct names were never missing. Comparing the record's declared functions against the deployed
+> dispatch table, computed the same way, gives **29 declared, 29 on chain, 0 bytecode-only, 0
+> record-only**.
+>
+> **`erc4626-vault/deployments/base-sepolia.json` was not changed, and nothing needed changing.** It
+> is a canonical record carrying a `sourceCommit`, and the episode is a reason to keep it that way:
+> editing it on the strength of a derived claim would have detached it from the artifact it names in
+> order to fix a mistake that was in the derivation.
+
+The five functions that were called while checking the claim above all answer, and they are worth
+keeping as measured facts about the deployed vault rather than as evidence of a gap: `name()` →
+`"Yield Vault Share"`, `symbol()` → `"yvSHARE"`, `asset()` →
+`0x036CbD53842c5426634e7929541eC2318f3dCF7e`, and `maxDeposit(0x2aE7…E034)` →
 `115792089237316195423570985008687907853269984665640564039457584007913129639935`
-(`type(uint256).max`, as ERC-4626 requires when there is no limit), and
-`transferFrom(0x2aE7…E034, 0xC066ac5D…, 1)` from the same owner reverts
-`ERC20InsufficientAllowance(0x2aE746C0ff0295c2da1aC338656F247e9758E034, 0, 1)`. Nothing in this
-document depends on the gap; it is recorded because a record that under-describes the deployed
-contract is the kind of thing that turns into a wrong integration later.
+(`type(uint256).max`, as ERC-4626 requires when there is no limit). One further probe belongs to the
+same set and produced a revert rather than a value: `transferFrom(0x2aE7…E034, 0xC066ac5D…, 1)`
+called by that owner reverts
+`ERC20InsufficientAllowance(0x2aE746C0ff0295c2da1aC338656F247e9758E034, 0, 1)` — which is the
+allowance being zero, not a missing function.
 
 **So: `deposit`, `mint`, `withdraw` and `redeem` are not the whole story** (the vault also exposes the
 ERC-20 surface, `approve` / `transfer` / `transferFrom` on its own shares, plus ownership transfer),
@@ -526,13 +557,26 @@ This list is the point of the document as much as the measurements are.
    contract `owner`; they do not, on their own, prove that `isValidSignature` is absent. **The
    decisive probe is a valid ERC-1271 signature from a contract that implements it**, and it was not
    run.
-6. **The five selectors missing from the deployment record's ABI are recorded, not fixed.** No change
-   was made to `erc4626-vault/deployments/base-sepolia.json`, and whether its generator or the record
-   is at fault was not investigated. `erc4626-vault/scripts/check-deployment-record.mjs` is the thing
-   that should have caught it, and why it did not was not investigated either.
+6. **~~The five selectors missing from the deployment record's ABI are recorded, not fixed.~~
+   RETRACTED — the claim in §1.4 this item referred to was false and has been corrected there.** The
+   record declares 29 functions, the deployed bytecode has 29 selectors, and the two sets are equal:
+   0 bytecode-only, 0 record-only. The "five missing selectors" were five mislabelled *names* produced
+   by this document, and §1.4 now carries the `cast sig` table that shows it. What remains genuinely
+   open from that episode is narrow and stated for completeness: **`erc4626-vault`'s
+   `web3-development-execute/projects/erc4626-vault/scripts/check-deployment-record.mjs` has no check
+   that compares the record's ABI against the deployed dispatch table at all.** It verifies
+   the reader-required keys, that `abi` contains the `Deposit` and `Withdraw` **events**, and the
+   on-chain facts via a self-contained minimal ABI — so a record whose ABI were genuinely short would
+   pass it. That is a real gap in the checker's coverage and it is not something this episode measured;
+   it is inferred from reading the script, and the script was not modified.
 7. **`erc4626-vault/test/YieldVaultFork.t.sol` reported `0 passed; 12 skipped`** in the run made during
-   this session — consistent with the fork tests' design of failing loudly when `MAINNET_RPC_URL` is
-   unset, but it means **the fork layer was not exercised** and nothing in this document leans on it.
+   this session, so **the fork layer was not exercised** and nothing in this document leans on it. The
+   reason is a documented design choice, not a defect: `setUp` reads `vm.envOr('MAINNET_RPC_URL', '')`
+   and returns early when it is empty, and each test calls `vm.skip(true)` — "offline: every test
+   skips". An earlier revision of this item called that behaviour "failing loudly", which is wrong;
+   the `revert("MAINNET_RPC_URL not set: fork test must not silently pass")` line that phrase comes
+   from belongs to a **different** fixture — this workspace's `toolchain/smoke/` Forge projects, not
+   this repository. Corrected here so the two are not conflated again.
 8. **No gas measurement.** Every figure a relayer would be sized against — the cost of a 3009 relay
    versus a permit relay, the extra cost of the intent, the cost of a type-`0x4` submission — is
    unmeasured. The §5 estimates are not derived from gas.
