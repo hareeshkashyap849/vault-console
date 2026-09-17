@@ -401,8 +401,9 @@ what it invalidated, and what is still unproven is recorded in `docs/STATIC-EXPO
 
 The seven `F1`–`F5` documents at the repository root are the working record behind the code
 above — the requirements each panel must satisfy, the invariants, the evidence map, the
-failure-scenario matrix and its results. Two more live under `docs/`, and they are a different
-kind of document: a work order and a runbook, both of which say plainly what has not happened yet.
+failure-scenario matrix and its results. Four more live under `docs/`, and they are a different
+kind of document: a work order, a runbook, a migration record and a plan, all of which say plainly
+what has not happened yet.
 
 | Document | Phase |
 |---|---|
@@ -412,6 +413,7 @@ kind of document: a work order and a runbook, both of which say plainly what has
 | `SUPPORT-AND-SIGNOFF.md` | F5 — browser matrix, build reproducibility, accessibility, sign-off |
 | `docs/DEPLOY-RUNBOOK.md` | D (integration) — putting the whole stack on public infrastructure: contract to Base Sepolia, record, index, front end to Vercel, and the evidence that would make the claim |
 | `docs/full-stack-frontend-brief.md` | B — the work order the four routes were built from, with a status block saying what was and was not carried out |
+| `docs/SIGNED-DEPOSIT-PLAN.md` | **a plan, not a delivery** — whether a signature-based (gasless) deposit is buildable against the deployed vault and this USDC, measured on chain rather than assumed: the token has EIP-2612 **and** EIP-3009, the vault has no signature entry point at all, and the four designs the measurements leave open each carry a week count and a list of what is still unverified |
 
 **On their provenance, stated plainly.** They follow a repeatable delivery process with
 numbered phases, gates and required artefacts: a software-delivery blueprint, a frontend
