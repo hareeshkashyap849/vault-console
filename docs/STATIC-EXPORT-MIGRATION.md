@@ -51,7 +51,8 @@ through the generated runtime config instead of per request.**
 > Still stale after all of those, found and not yet fixed: the header comment in
 > `src/app/layout.tsx` (it still says `/vault` and `/history` are server components),
 > `src/app/providers.tsx`'s own note about `page.tsx`, the header of
-> `scripts/build-runtime-config.mjs` (present tense about the deleted `deployment.ts`), the name of
+> `web3-development-execute/projects/vault-console/scripts/build-runtime-config.mjs` (present tense
+> about the deleted `deployment.ts`), the name of
 > one test in `test/api.test.ts` ("on the server"), and one dead arm of the `showsDeployment`
 > assertion in `tools/browser-assert.mjs` (it matches the deleted loader's message; the live
 > failure text is `Providers`' own).
