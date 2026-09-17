@@ -289,7 +289,10 @@ work was done: a check that cannot fail for the reason it exists is worse than n
 cross-checks were aimed at Anvil and a local index service while the published page reads Base Sepolia and a
 build-time snapshot.
 
-**Result: `57 passed / 1 failed / 0 skipped`, 58 assertions run, exit 1.** Command:
+**Result: `57 passed / 1 failed / 0 skipped`, 58 assertions run, exit 1.** Two runs of the mended tool, one
+before and one after the last three guards were added (the raw-uint256 skip, the unusable-decimals refusal,
+the degenerate-supply skip), both score the same counts and the same single failure; the second is the one in
+the evidence file. Command:
 
 ```
 node --import file:///D:/1/11111/deepseek/web3-development/web3-development-execute/toolchain/fetch-via-socks.mjs \

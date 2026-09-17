@@ -785,7 +785,8 @@ check is the only thing currently standing between this page and a self-contradi
 ### 9.4 What this run establishes
 
 - The export **serves every route**; a real browser renders all four, and each **settles** out of the loading
-  screen (measured: 3,433 / 2,285 / 2,138 / 2,406 characters; the console's own settle line reports 6 polls).
+  screen (measured: 3,433 / 2,285 / 2,138 / 2,406 characters, settling on the 6th–8th poll across two runs --
+  the poll count moves, which is why the wait is a property of the page rather than a sleep).
 - The console draws its chart with **zero NaN coordinates**, one body per candle, four panels.
 - **`totalSupply` on the page equals what the chain holds** for the vault the page's config names:
   the page renders `21`, and `0x7941438e…` on chain 84532 reports `21000000000000000000` base units with 18

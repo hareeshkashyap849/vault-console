@@ -302,8 +302,8 @@ const IS_SNAPSHOT = config?.indexSnapshot === true;
 const REAL_FETCH = globalThis.__fetchViaSocksRealFetch ?? globalThis.fetch;
 const CHAIN_FETCH_ROUTE =
   REAL_FETCH === globalThis.fetch
-    ? 'globalThis.fetch (no routing module installed, or it exposes no real-fetch handle)'
-    : 'globalThis.__fetchViaSocksRealFetch (routing module is installed; POST cannot go through it)';
+    ? 'the fetch in front of this process (no routing module installed)'
+    : 'globalThis.__fetchViaSocksRealFetch (routing module installed)';
 
 /** `eth_call` against the endpoint the page's config names, over the route that can carry a POST. */
 async function ethCall(to, data) {
@@ -381,12 +381,16 @@ if (STACK === 'local') {
     `this target's config names a live index service (indexApiUrl ${JSON.stringify(INDEX_URL)}, indexSnapshot false); ` +
       'the tool cannot reach it from Node, so it does not get to report PASS on it');
 } else {
-  check('the page names NO live index service, which is what a static host can have',
-    INDEX_URL === null || IS_SNAPSHOT,
-    `indexApiUrl ${JSON.stringify(INDEX_URL)}, indexSnapshot ${IS_SNAPSHOT}`);
   // The other half: the service is gone, and the files it was replaced by must be there. This is
   // the check that would fail if the snapshot step were dropped from the build -- which is
   // exactly what makes it worth having.
+  //
+  // THE PATH LIST IS THE SERVICE'S OWN FIVE ENDPOINTS, which `src/lib/api.ts` calls. It is written
+  // out here rather than imported: this tool exists to be a second implementation of the app's
+  // claims, and importing the app's own list would make "the five paths are served" a statement
+  // about the list rather than about the site. The same five are asserted against the same host by
+  // `tools/check-published-snapshot.mjs`, which is where a change to the real endpoints would show
+  // up first.
   const snapshotPaths = ['/api/status', '/api/price', '/api/candles', '/api/summary', '/api/events'];
   const missing = [];
   snapshotBodies = {};
@@ -400,6 +404,16 @@ if (STACK === 'local') {
     if (json === null) missing.push(`${p} (not JSON)`);
     else snapshotBodies[p] = json;
   }
+  // Both ways of naming no live service are accepted and the detail says WHICH one this target
+  // used: `indexApiUrl: null` is the distinct `no-route` kind, and a same-origin path with
+  // `indexSnapshot: true` is a snapshot served as files. They are different facts about the same
+  // deployment and a reader of this line must not have to guess which applies.
+  check('the page names NO live index service, which is what a static host can have',
+    INDEX_URL === null || IS_SNAPSHOT,
+    `indexApiUrl ${JSON.stringify(INDEX_URL)}, indexSnapshot ${IS_SNAPSHOT} -> ` +
+      (INDEX_URL === null
+        ? 'no route to an index at all'
+        : 'same-origin paths, and the config says the answers were captured at build time'));
   check('the snapshot files the page reads instead of a service are served by the same host',
     missing.length === 0,
     missing.length === 0
@@ -560,24 +574,44 @@ check('the four panels rendered', page.panels === 4, `${page.panels} sections`);
 // the app's formatter would compare the page with itself.
 const shareDecimalsCall = await ethCall(VAULT, '0x313ce567');
 const totalSupplyCall = await ethCall(VAULT, '0x18160ddd');
-const shareDecimals = shareDecimalsCall.ok ? Number(BigInt(shareDecimalsCall.raw)) : null;
+const shareDecimalsRaw = shareDecimalsCall.ok ? Number(BigInt(shareDecimalsCall.raw)) : null;
+/**
+ * A decimals value outside this range is a fixture problem, not a formatting one -- and `10n ** BigInt(n)`
+ * would either throw or allocate for it, which turns a bad deployment into a crash in the tool. Refused
+ * here, so the check below reports "the decimals the chain reports are unusable" instead.
+ */
+const shareDecimals = shareDecimalsRaw !== null && shareDecimalsRaw >= 0 && shareDecimalsRaw <= 77 ? shareDecimalsRaw : null;
 check('the chain the page reads answered, at the address the page reads',
-  shareDecimalsCall.ok && totalSupplyCall.ok && chainIdCall.ok,
+  shareDecimalsCall.ok && totalSupplyCall.ok && chainIdCall.ok && shareDecimals !== null,
   shareDecimalsCall.ok && totalSupplyCall.ok && chainIdCall.ok
-    ? `${RPC} reports chain ${chainIdCall.id}; vault ${VAULT} answered totalSupply and decimals`
+    ? `${RPC} reports chain ${chainIdCall.id}; vault ${VAULT} answered totalSupply ` +
+      `(${totalSupplyCall.raw}) and decimals (${shareDecimalsRaw}${shareDecimals === null ? ' -- NOT USABLE as a decimal count' : ''}) via ${CHAIN_FETCH_ROUTE}`
     : `${shareDecimalsCall.reason ?? totalSupplyCall.reason ?? chainIdCall.reason}`);
 check('the chain the page reads is the chain the page config names',
   chainIdCall.ok && String(chainIdCall.id) === String(CHAIN_ID),
   chainIdCall.ok ? `${RPC} is chain ${chainIdCall.id}; the page config says ${CHAIN_ID} (${CHAIN_NAME})` : String(chainIdCall.reason));
 
 const supplyRendered = /Total shares\s*\n?\s*([\d,\.]+)/.exec(page.text)?.[1] ?? null;
+/**
+ * `0` is the one value this equality cannot test: `formatRaw(0n, 18)` is `"0"`, the raw string is `"0"`
+ * as well, and a page that printed base units unformatted would print the same character. The
+ * deployment record's own note says the vault "was deployed but is not yet funded" -- which it no longer
+ * is -- so this is reported as a SKIP with the reason rather than passed, because an assertion whose
+ * expected and unformatted forms coincide is the same vacuity this file was rewritten to remove.
+ */
+const supplyIsDegenerate = totalSupplyCall.ok && totalSupplyCall.raw.replace(/^0+/, '') === '';
 const expectedSupply = totalSupplyCall.ok && shareDecimals !== null ? formatRaw(totalSupplyCall.raw, shareDecimals) : null;
-
-check('totalSupply rendered as SHARES, not as the raw uint256',
-  expectedSupply !== null && sameFigure(supplyRendered, expectedSupply),
-  `the page shows ${supplyRendered ?? 'NOTHING'}; ${VAULT} on chain ${CHAIN_ID} holds ` +
-    `${totalSupplyCall.ok ? totalSupplyCall.raw : 'UNREAD'} base units with ${shareDecimals ?? '?'} decimals, which this page must print as ${expectedSupply ?? '?'}` +
-    (settle.figure !== 'rendered' ? ` [the chain figure was still ${settle.figure} when the page was read]` : ''));
+if (supplyIsDegenerate) {
+  skip('totalSupply rendered as SHARES, not as the raw uint256',
+    `this deployment's totalSupply is ${totalSupplyCall.raw}, whose formatted and raw forms are both "0", ` +
+      `so the comparison cannot distinguish a formatted figure from an unformatted one -- the page does render ${supplyRendered ?? 'NOTHING'}`);
+} else {
+  check('totalSupply rendered as SHARES, not as the raw uint256',
+    expectedSupply !== null && sameFigure(supplyRendered, expectedSupply),
+    `the page shows ${supplyRendered ?? 'NOTHING'}; ${VAULT} on chain ${CHAIN_ID} holds ` +
+      `${totalSupplyCall.ok ? totalSupplyCall.raw : 'UNREAD'} base units with ${shareDecimals ?? '?'} decimals, which this page must print as ${expectedSupply ?? '?'}` +
+      (settle.figure !== 'rendered' ? ` [the chain figure was still ${settle.figure} when the page was read]` : ''));
+}
 
 /**
  * THE RAW-INTEGER CHECK, AND THE COMMA THAT MADE IT UNFALSIFIABLE.
