@@ -42,11 +42,37 @@
 # The `decimals()` read at startup is NOT disabled and cannot be: it is a chain read, `/api/price`
 # answers 503 without it, and the capture refuses a 503. So a build fails rather than publishing
 # prices derived from assumed decimals.
+#
+# WHY THERE IS A CRON, AND WHY IT IS THE ONLY FRESHNESS MECHANISM THIS SITE HAS
+#
+# The snapshot above is frozen at the moment this job runs. Nothing on the published site can take
+# a newer one: a static host runs no process, and no free hosting tier runs a long-lived one either
+# -- Render sleeps a web service after 15 idle minutes, Railway's free credit is about $1/month,
+# Koyeb gives 0.1 vCPU (`docs/INDEX-SNAPSHOT-PLAN.md`, "Why this is worth doing rather than hosting
+# the service", and `erc4626-vault-dapp/.github/workflows/index.yml` under "WHY A CRON AND NOT A
+# SERVICE", which are the same reasoning applied to the indexer itself). The design follows from
+# that constraint rather than from a preference. So freshness comes from RE-PUBLISHING the snapshot
+# on a schedule: this cron re-runs the whole job, the capture asks the service for its latest
+# answers, and the site's figures move forward by one publish.
+#
+# Every six hours is enough BECAUSE the page states its own age: the capture passes `updatedAt` and
+# `staleSeconds` through unchanged and labels the source as a snapshot, so a reader always sees how
+# old the figures are. A cron does not make them live -- it makes them recent, and the labels are
+# what keep that honest. It also re-runs `npm run check` and the served-snapshot check, so a
+# regression in this repository surfaces as a failing scheduled run rather than on the live site.
+#
+# GitHub only starts honouring `schedule:` once this file is on the DEFAULT BRANCH, and a scheduled
+# run is then queued at best-effort times (it can lag under load). `workflow_dispatch` is what makes
+# the same job verifiable immediately, which is why both triggers are here.
 name: pages
 
 on:
   push:
     branches: [main]
+  schedule:
+    # Every 6 hours, at 17 minutes past: an off-the-hour minute because GitHub's scheduler is
+    # busiest at :00, and this job competes with everything else queued then.
+    - cron: '17 */6 * * *'
   workflow_dispatch:
 
 permissions:
