@@ -19,6 +19,36 @@
 driven through kimi-webbridge/CDP).
 The other browsers are untested. `untested` and `unsupported` are two different things, and this table keeps them apart.
 
+**And the write path, in that same browser — recorded here because this file is where a reader looks for
+"what has actually been measured".** On **2026-09-17** a person drove the **published** console's wallet
+page (`/vault/manage`, <https://hareeshkashyap849.github.io/vault-console/vault/manage>) in a real browser,
+on **Base Sepolia (chain 84532)**, and direct reads of the chain afterwards show:
+
+- the **allowance moved `0 → 1000000`** base units (1.0 USDC) on the account below — the approve is
+  confirmed **by state**, not by a receipt the session kept;
+- the **vault moved from 20 USDC / 20 shares to 21 USDC / 21 shares**, and
+  `0x2aE746C0ff0295c2da1aC338656F247e9758E034` moved from **20 to 21 shares**;
+- a successful transaction
+  **`0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751`** (block **46945096**) emitted
+  the vault's **`Deposit`** event;
+- the account used, `0x2aE746C0ff0295c2da1aC338656F247e9758E034`, is **this workspace's own testnet deploy
+  key**.
+
+**That is the whole of what is established, and it is evidence about the chain rather than about the
+page.** The deposit transaction's `from` was `0xC066ac5D385419B1A8c43A0E146fA439837a8B8c` and its `to`
+was `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3` — **neither is the connected account and neither is the
+vault**, so the deposit was executed through an intermediary whose role is **not established**; the
+approve's own transaction hash was **never identified**; the `Deposit` event's decoded `owner` /
+`assets` / `shares` were **not read back**; and two earlier failures in the same session
+(`Chain must support EIP-7702 for sponsored or gas included transaction`, and
+`insufficient funds for gas * price + value: have 352712045842 want 898152800000`) are recorded
+**without their order and without their cause**. The session captured **no screenshot and no rendered
+text**, so no claim below about what the page *displayed* is supported by it. **No causal account of the
+session is written in this file** — the mechanism is not established, and two earlier confident claims
+from that session had already been disproved by measurement. The measurement, the rows it changes and the
+three open checks are in
+`web3-development-execute/projects/vault-console/BROWSER-TEST-PLAN.md` §5's 2026-09-17 amendment.
+
 | Browser | Version | Measured? | Measured result | Note |
 |---|---|---|---|---|
 | Chrome (the user's real profile, with MetaMask 13.48) | Chromium family, version follows the user's environment | **Yes** | **51/51 assertions passed, 0 failed** | see `docs/evidence/browser-assert.txt` and `console-live.png`. The console's original 14 are unchanged; 17 of the rest cover `/history`, including two that read the page's own arithmetic back off the painted DOM |
@@ -189,9 +219,13 @@ Each row copies the wording out of the implementation verbatim and checks whethe
 | 5 | **a non-flat price dataset** | the price in the local vault is `1.1` throughout (each yield report raises `totalAssets` proportionally and mints no shares) | low — the non-flat path is covered by unit tests on synthetic candles. But **no real data has gone down that path** | the author |
 | 7 | **whether the coverage gap is unavoidable** | no archive node was swapped in to check the service's claim | low — but this **rests on the service's own statement**, which this project has not verified independently | the author |
 | 8 | **timeouts / 429 rate limiting / TLS errors** | the local environment (an unstable SOCKS5 proxy, local ports that require `NO_PROXY`) makes experiments of that kind unreliable | medium — only one form of unavailability has been measured: "the connection was refused". **Note**: that is exactly the form scenarios 9/10 measured; timeouts and rate limiting are still untested | the author |
+| 9 | **the wallet-write session's evidence set is incomplete** | a person drove the published wallet page on 2026-09-17 and **the chain confirms the state change** (§1), but the session kept no page capture, so the interface it went through is unverified | medium. Two transactions are confirmed **by state** and one failure mode (`insufficient funds for gas * price + value: have 352712045842 want 898152800000`) is recorded **without** its order or cause. Three open checks, in the order that would settle it: ① `eth_getCode` on `0x2aE746C0ff0295c2da1aC338656F247e9758E034` — a **`0xef0100`** prefix would mean an **EIP-7702 delegation**; ② identify the two intermediary addresses, `0xC066ac5D385419B1A8c43A0E146fA439837a8B8c` and `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3`; ③ decode the `Deposit` log of `0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751`. **Until then, nothing in this file is a causal account of that session** | the author |
 
 > Of the original 8 items, **two are resolved** (1, 2) and **one that was resolved has returned to outstanding**
 > (6, retired with the static export), so the remaining **6** are accepted by the author in the role of **portfolio author**.
+> **Item 9 was added on 2026-09-17** — it is the first item in this table that comes from a measurement that
+> *succeeded* rather than one that was never taken: the wallet write path was exercised for real (§1), and what
+> is outstanding is the evidence set around it rather than the attempt. With it the accepted list is **7**.
 > **There is no written client acceptance** — because there is no client. This is the largest difference between this file and the template, and it is written in the most visible place.
 > One other significant change: **the error wording on the failure path was found to be unreadable under measurement** (the viem diagnostic dump smearing the screen),
 > which was fixed and covered by 3 regression tests. **That one is the classic "only measurement finds it" case** —
@@ -206,7 +240,7 @@ Each row copies the wording out of the implementation verbatim and checks whethe
 - [x] accessibility baseline: §3 writes `untested` honestly and names the two **specific suspicions**, contrast and the tooltip
 - [x] error-wording review: 10 rows copy the source verbatim (§4), **and item 5 was added because of a measurement** (classifying and wording the chain-side error)
 - [ ] **the client confirms the F1 statements one by one** — **cannot be satisfied**: there is no external client. §5 is self-assessed by the author, with its nature stated explicitly
-- [x] outstanding items and risk acceptance: **2** of the original 8 are resolved (one resolution was retired by the static export and is written as outstanding again), and each of the remaining 6 has "why it was not done" and an acceptor written out (§6)
+- [x] outstanding items and risk acceptance: **2** of the original 8 are resolved (one resolution was retired by the static export and is written as outstanding again), and each of the remaining **7** — the 6 plus item 9, added 2026-09-17 from the wallet-write session — has "why it was not done" and an acceptor written out (§6)
 
 **G-F5 conclusion**: **passed (self-assessed)** — 2026-09-16, the author.
 

@@ -286,6 +286,71 @@ describe('fixture: /api/summary', () => {
   });
 });
 
+describe('fixture: /api/events', () => {
+  /**
+   * PROVENANCE, AND WHY THIS ONE IS A DIFFERENT CHAIN FROM THE OTHER FOUR.
+   *
+   * The four fixtures above are the local anvil deployment (chain 31337, vault
+   * `0x9fE4...`), captured by `tools/capture-fixtures.mjs` against a developer service. This
+   * one is the **committed Base Sepolia snapshot** (`data/vault.sqlite`, chain 84532), taken
+   * from the service started against it -- the same service and the same database that produce
+   * the published console's `public/api/events`. So the vault address and chainId here are
+   * DIFFERENT from the four above, on purpose, and `cross-fixture consistency` below does not
+   * include this file for that reason.
+   *
+   * It exists because `EventResponse` is the one interface in `src/lib/types.ts` that was
+   * written from the route table's one-line description rather than from a response, and the
+   * `filter` envelope was missing from it as a result. Asserting the envelope against a
+   * captured response is the only way that class of error is visible without a live service.
+   */
+  const body = load('events.json');
+
+  it('has exactly the envelope `EventResponse` declares -- including `filter`', () => {
+    assertKeys(body, ['events', 'count', 'limit', 'maxLimit', 'filter'], 'EventResponse');
+    assertKeys(body.filter as Record<string, unknown>, ['kind', 'account'], 'events.filter');
+  });
+
+  it('spells "not filtered" as null rather than by omitting the key', () => {
+    // `null` is "no filter applied"; an absent key is neither that nor "filtered to nothing".
+    const filter = body.filter as Record<string, unknown>;
+    assert.equal(filter.kind, null);
+    assert.equal(filter.account, null);
+  });
+
+  it('gives every event row the nine fields `VaultEvent` declares', () => {
+    // The tx hash is the reason this table exists at all: it is what a reader checks against
+    // a block explorer, so a row without one is not a row this page can show.
+    const events = body.events as Array<Record<string, unknown>>;
+    assert.ok(events.length > 0, 'the captured snapshot contains one real Deposit; an empty fixture would prove nothing');
+    for (const event of events) {
+      assertKeys(
+        event,
+        ['blockNumber', 'logIndex', 'blockHash', 'txHash', 'kind', 'account', 'assets', 'shares', 'timestamp'],
+        'VaultEvent',
+      );
+      assert.equal(typeof event.blockNumber, 'number');
+      assert.equal(typeof event.logIndex, 'number');
+      assert.equal(typeof event.timestamp, 'number');
+      assert.match(event.blockHash as string, /^0x[0-9a-f]{64}$/);
+      assert.match(event.txHash as string, /^0x[0-9a-f]{64}$/);
+      // Amounts are decimal strings, or null where the kind carries no amount. NEVER numbers:
+      // `shares` here is 20000000000000000000, which a double would round.
+      for (const key of ['assets', 'shares']) {
+        const value = event[key];
+        assert.ok(value === null || typeof value === 'string', `${key} must be a string or null, got ${typeof value}`);
+        if (typeof value === 'string') assert.match(value, /^\d+$/, `${key} must be a uint256 decimal string`);
+      }
+      assert.ok(event.account === null || /^0x[0-9a-f]{40}$/.test(event.account as string));
+    }
+  });
+
+  it('reports a count that matches the rows it actually sent', () => {
+    assert.equal(body.count, (body.events as unknown[]).length);
+    assert.equal(body.limit, 50, 'the console asks for 50 rows (EVENT_ROWS in src/app/history/page.tsx)');
+    assert.ok((body.count as number) <= (body.limit as number));
+  });
+});
+
 describe('cross-fixture consistency', () => {
   it('the same vault and chain appear in every fixture that names them', () => {
     const status = load('status.json');

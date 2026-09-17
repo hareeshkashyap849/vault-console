@@ -50,6 +50,14 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    /* The hand-written declaration for `scripts/capture-index-snapshot.mjs`.
+       It has to be `.d.mts`, not `.d.ts`: the test imports the script by its real specifier
+       (`../scripts/capture-index-snapshot.mjs`), and TypeScript looks for a declaration matching
+       that extension exactly -- `capture-index-snapshot.d.mts` is what satisfies
+       `capture-index-snapshot.mjs`. `.d.mts` is a distinct extension from `.ts`, so this one
+       pattern is needed to bring it under the typecheck; without it the file is silently ignored
+       and the script's test goes back to being `any` (which is what it was before this line). */
+    "scripts/**/*.mts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

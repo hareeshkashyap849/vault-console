@@ -43,6 +43,27 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
  */
 const SKIP_TYPECHECK = process.env.NEXT_SKIP_TYPECHECK === '1';
 
+/**
+ * Run the build's page workers as THREADS instead of child processes. Also a sandbox workaround.
+ *
+ * `next build` collects page data with `jest-worker`, which by default forks a process per worker
+ * and talks to it over a named pipe. This workspace's sandbox refuses named pipes, so the build
+ * dies at "Collecting page data using 7 workers" with a bare `Error: spawn EPERM` and no file or
+ * line -- the same class of failure `NEXT_SKIP_TYPECHECK` exists for, at a different step.
+ *
+ * `experimental.workerThreads` is Next's own switch for this: the workers become `worker_threads`,
+ * which share the parent's process and need no pipe. The work is identical -- the same worker
+ * module, the same exposed methods, the same output. What changes is only how the child is
+ * created, which is exactly the thing the sandbox forbids.
+ *
+ * As with `NEXT_SKIP_TYPECHECK`, THE WORKFLOW DELIBERATELY DOES NOT SET IT: a real runner has pipes
+ * and uses the default path, so CI exercises the configuration this project actually ships.
+ * Locally it is set by hand:
+ *
+ *   STATIC_EXPORT=1 NEXT_PUBLIC_BASE_PATH= NEXT_SKIP_TYPECHECK=1 NEXT_WORKER_THREADS=1 npm run build
+ */
+const WORKER_THREADS = process.env.NEXT_WORKER_THREADS === '1';
+
 /** Where the browser's `/api/*` requests are forwarded, in the modes that have a server. */
 const API_TARGET = process.env.VAULT_API ?? 'http://127.0.0.1:8787';
 const CHAIN_RPC = process.env.VAULT_RPC ?? 'http://127.0.0.1:8545';
@@ -50,6 +71,7 @@ const CHAIN_RPC = process.env.VAULT_RPC ?? 'http://127.0.0.1:8545';
 const shared: NextConfig = {
   reactStrictMode: true,
   ...(SKIP_TYPECHECK ? { typescript: { ignoreBuildErrors: true } } : {}),
+  ...(WORKER_THREADS ? { experimental: { workerThreads: true } } : {}),
   // Written into the bundle by Next at build time. The client config loader joins it to the
   // path of the generated config, so one build works at a domain root and under a project
   // subpath without a second code path.

@@ -1,0 +1,22 @@
+{
+  "events": [
+    {
+      "blockNumber": 46919498,
+      "logIndex": 69,
+      "blockHash": "0xf4938f73616bf07af1c1110202936c72e42531d3cfdad0ffc145614d0fa88456",
+      "txHash": "0x3ec3b305ec60650800f5bca9c7e58c8f428e757956f4c60666c7bed47b5ffbc2",
+      "kind": "Deposit",
+      "account": "0x2ae746c0ff0295c2da1ac338656f247e9758e034",
+      "assets": "20000000",
+      "shares": "20000000000000000000",
+      "timestamp": 1789607284
+    }
+  ],
+  "count": 1,
+  "limit": 50,
+  "maxLimit": 500,
+  "filter": {
+    "kind": null,
+    "account": null
+  }
+}

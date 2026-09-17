@@ -19,6 +19,16 @@
 > `interaction not measured` in `BROWSER-TEST-PLAN.md` §5. The brief is kept as the work order it
 > was, with this status block added, so a reader can see what the plan was and what the outcome was
 > rather than inferring either from the code.
+>
+> **Update 2026-09-17**: the sentence above is superseded for two of those rows, and is kept because
+> it was true when written. A person drove the published wallet page by hand and two transactions
+> landed — the allowance moved `0 → 1000000` (1.0 USDC) and the vault and the account both moved
+> 20 → **21**, with the vault's `Deposit` event on
+> `0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751` (block 46945096). Those rows
+> now read `partly measured` rather than `interaction not measured`, because the **wording** each row
+> asserts is still uncaptured and three things about the session are unresolved; §5's 2026-09-17
+> amendment in `web3-development-execute/projects/vault-console/BROWSER-TEST-PLAN.md` has the
+> measurement and the open checks.
 
 This is the work order for turning `vault-console` from one read-only page into a multi-page
 front end with wallet connection, and for folding in the wallet operations that the sibling

@@ -173,7 +173,23 @@ export default function Page() {
         </Panel>
 
         {/* History: the index */}
-        <Panel title="Then" source="read from the index service, which lags by design">
+        {/*
+          THE LABEL DEPENDS ON WHERE THE FIGURES CAME FROM, and that is not a detail.
+
+          With `indexSnapshot` the answers were captured by the build and are served as files, so
+          "which lags by design" would be the wrong sentence twice over: there is no service
+          responding, and the lag is not a design choice of an indexer -- it is the age of the
+          snapshot. The reader gets one of exactly two claims about the same numbers, and the
+          client cannot work out which from the URL alone (see `RuntimeConfig.indexSnapshot`).
+        */}
+        <Panel
+          title="Then"
+          source={
+            runtime.indexSnapshot
+              ? 'read from a snapshot of the index service, taken when this page was published'
+              : 'read from the index service, which lags by design'
+          }
+        >
           {candles.error !== null ? (
             <Failure title="The index service could not be read." error={candles.error} />
           ) : candles.data === undefined ? (

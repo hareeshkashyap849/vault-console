@@ -267,22 +267,27 @@ server to read environment variables at request time. The upstreams are decided 
 |---|---|---|
 | `--record deployments/base-sepolia.json` | the record committed in this repository | the published host has no sibling `erc4626-vault` checkout. The generator **fails the build** on a record missing `vault` / `asset` / `chainId` / `deployBlock` |
 | `--rpc https://sepolia.base.org` | the chain the **browser** reads | chain reads happen in the browser now, and `process.env.VAULT_RPC` in a bundle is `undefined` — a fallback there would silently read the wrong chain |
-| `--index null` | no index service | `null` is a value, not a gap: the panels say the page has no route to the index service (`no-route`) and make **no request**, instead of reporting a service they never asked |
+| `--index /` | the index answers are **same-origin files** | the build captures the service's own responses into `public/api/` (see below), and the client fetches `api/status` and friends from the page's own directory. `null` remains the value for a page with **no** route, which says so and makes **no request** |
+| `--snapshot true` | the index answers are a **snapshot**, not a live service | the published figures are frozen at build time and the panels must say so. The generator **refuses** `--snapshot true --index null` and refuses `--snapshot` with a non-boolean, because neither describes a page that can exist |
 | `NEXT_PUBLIC_BASE_PATH=/<repo>` | the GitHub Pages project subpath | Next rewrites `<Link>` and the router for a `basePath`; it cannot rewrite a `fetch` written by hand, so the config loader adds it itself (`src/lib/runtimeConfig.ts`) |
 | ~~`VAULT_DEPLOYMENT`~~ · ~~`NEXT_PUBLIC_VAULT_CHAIN_ID` / `_CHAIN_NAME`~~ · ~~`VAULT_API`~~ | **all three retired** | nothing in `src/` reads them: the record path is the generator's `--record` flag, the chain identity comes from the generated config (`src/lib/wagmi.ts` builds the wallet config from it), and the index URL is the config's `indexApiUrl`. `VAULT_RPC` / `VAULT_API` still configure the **dev server's** rewrites in `next.config.ts`, which is why the scenario scripts use them — a static host has no rewrite |
 
-**The one real design question in this step.** On a public deployment the chain is reachable but the
-index service is not, unless something hosts it. The console is built for exactly that case: the
-published page reports that it has **no route** to the index service, with the `Now` panel still
-exact — which is honest, and is also a page whose best feature is missing. There are three answers, and the
-choice should be made explicitly rather than by omission:
+**The one real design question in this step, and it has been decided.** On a public deployment the
+chain is reachable but the index service is not, unless something hosts it. Three answers were on the
+table, and the second was chosen:
 
-1. **Host the index service too.** Then point `--index` at it (an absolute URL) and rebuild, so the
-   whole system is public and only the genuine index-down path shows.
-2. **Ship a committed snapshot** of the index output and point `--index` at it, labelled as a
-   snapshot with its capture time. Cheaper, and it puts a fabricated-looking number on a page whose
-   entire argument is that figures carry their provenance — so the label has to be impossible to miss.
-   `STATIC-EXPORT-MIGRATION.md`, beside this file, records this as the natural next step.
+1. **Host the index service too.** Makes `/history` live; needs a host that keeps a process alive,
+   which is the constraint the indexer's own design already worked around.
+2. **Ship a snapshot of the index output.** ✅ **Chosen and implemented** — and, importantly, the
+   snapshot is produced **by the service**, not by a script that reads the SQLite and rewrites the
+   JSON: `src/api/price.ts` owns the share-price formula and a second implementation here would be a
+   second source of truth for the vault's most error-prone number. The workflow clones
+   `erc4626-vault-dapp`, starts it against its committed `data/vault.sqlite`, captures its answers
+   into `public/api/`, and labels them as a snapshot on the page. `/history` on the published site
+   therefore shows the real `Deposit` at block 46,919,498 with its transaction hash, and the
+   snapshot's age grows visibly rather than being reset to zero. The engineering record, the measured
+   evidence and the one endpoint not covered are in
+   `web3-development-execute/projects/vault-console/docs/INDEX-SNAPSHOT-PLAN.md`.
 3. **Show only what the chain supports**: link to the console but stand the wallet page at the
    front. Fewer moving parts, and a smaller claim.
 
@@ -301,7 +306,15 @@ Recorded in the repository, not just in a chat message:
 - **No audit, no mainnet, no real funds.** A testnet deployment is evidence that the system runs
   publicly; it is not evidence that the contracts are safe to hold value.
 - **The wallet write path still needs a human.** MetaMask requires a person to click Approve, so the
-  four rows in `../BROWSER-TEST-PLAN.md` §5 stay `interaction not measured` even after
-  this is done — unless someone drives it by hand and records the hash.
+  four rows in `web3-development-execute/projects/vault-console/BROWSER-TEST-PLAN.md` §5 stayed
+  `interaction not measured` after this runbook was written.
+  **Updated 2026-09-17**: a person did drive the published wallet page by hand and recorded the hash —
+  the allowance moved `0 → 1000000` (1.0 USDC) and the vault and the account both moved 20 → **21**,
+  with a `Deposit` event on
+  `0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751` (block 46945096). So
+  "unless someone drives it by hand and records the hash" has happened; what has **not** happened is the
+  rest of the evidence set (no screenshot, the approve's own hash unidentified, the `Deposit` log not
+  decoded, and the deposit's `from`/`to` neither the connected account nor the vault). §5's 2026-09-17
+  amendment is the record, and it is written without a causal account of the session.
 - **Free hosting sleeps.** A Render instance and a Vercel cold start both mean the first request
   after a quiet period is slow, which looks like a broken page to whoever opens it first.

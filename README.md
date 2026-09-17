@@ -11,11 +11,26 @@ from `https://sepolia.base.org`. The vault is
 on **Base Sepolia (84532)**; as of the last check the published page showed **20 USDC** of total
 assets, read live.
 
-**What the published site cannot do, stated here rather than left to be discovered:** `/history`
-needs the **index service**, which is a separate process, and a static host runs none. That page
-therefore says *this page has no route to the index service* and shows nothing — not an error, but
-not data either. The `Now` panels read the chain directly and are unaffected. Publishing a snapshot
-of the index output is the next step (see `docs/STATIC-EXPORT-MIGRATION.md`).
+**The index is published as a SNAPSHOT, and the pages say so.** `/history` reads the index service,
+and a static host runs no process — so the build **runs the service, asks it for its own answers, and
+publishes those bytes** at the paths the client already requests (`scripts/capture-index-snapshot.mjs`
+fills `public/api/status`, `summary`, `events`, `price` and `candles`; the Pages workflow starts
+`erc4626-vault-dapp` against its committed `data/vault.sqlite` to produce them). The figures are
+therefore **frozen at the moment the page was published**, and the panels label the source
+*read from a snapshot of the index service, taken when this page was published* rather than
+*the index service, which lags by design*. The captured `staleSeconds` and `updatedAt` are passed
+through unchanged, so the age a reader sees keeps growing — which is true, and better than a figure
+that always says "0s ago". The `Now` panels read the chain directly and are unaffected.
+
+**The chart on `/vault` is drawn from the same snapshot, and it is the one figure a reader could
+mistake for live.** `/vault`'s `Then` panel asks for `/api/candles?bucket=60&limit=5000`, and the
+capture publishes that path like the other four, so the panel draws a candle series on the published
+site rather than reporting a failed index read. The panel does not present it as live: the same
+*read from a snapshot of the index service, taken when this page was published* label sits over the
+chart, and the series it draws is the one that existed at build time — a reader who wants the price
+now has to read the chain, which is what the `Now` panels do. See
+`web3-development-execute/projects/vault-console/docs/INDEX-SNAPSHOT-PLAN.md` for the measurements,
+including the one that fixed the gap this paragraph used to describe.
 
 | Route | What it is | Sources it reads | Touches a wallet |
 |---|---|---|---|
@@ -39,17 +54,24 @@ npm run check:browser  # the browser assertions (needs a real browser and runnin
 ```
 
 ```bash
-# the way the published site is built
+# the way the published site is built -- with the service running against its committed snapshot
+node scripts/capture-index-snapshot.mjs --service http://127.0.0.1:8787 --out public/api
 node scripts/build-runtime-config.mjs \
   --record deployments/base-sepolia.json --rpc https://sepolia.base.org \
-  --index null --out public/api/config
+  --index / --snapshot true --out public/api/config
 STATIC_EXPORT=1 NEXT_PUBLIC_BASE_PATH=/vault-console npm run build   # -> out/
+node tools/check-published-snapshot.mjs --base http://127.0.0.1:8123  # against a served out/
 ```
 
-`--index null` is the difference that matters: in development the config points the index client at
-`/` and Next rewrites `/api/*` to the running service, so the service keeps refusing cross-origin
-requests as it should. The published build has no proxy to offer, so the config says there is no
-route, and the panels say so instead of blaming a service they never contacted.
+Three of those are the whole difference between the two modes. `--index /` plus `--snapshot true`
+tells the config that the index answers are same-origin files and that they are a snapshot; the
+generator refuses that pair with `--index null`, and refuses `--index null` with `--snapshot`, because
+neither combination describes a page that can exist. Development needs none of it: the config points
+the index client at `/` and Next rewrites `/api/*` to the running service, so the service keeps
+refusing cross-origin requests as it should. `check-published-snapshot.mjs` is what proves the built
+files are actually SERVED at those paths, `indexSnapshot` included — file existence is not the same
+fact. In this workspace `next build` also needs `NEXT_SKIP_TYPECHECK=1 NEXT_WORKER_THREADS=1`; see
+`next.config.ts` for why both are sandbox workarounds that the workflow deliberately does not set.
 
 
 ## The console at `/vault`
@@ -297,11 +319,13 @@ src/lib/endpoints.ts          where the upstream services are, for the build con
                               because the browser gets its endpoint from api/config instead
 src/lib/api.ts                typed client; classifies unreachable / refused / malformed-URL / no-route
 src/lib/chain.ts              live reads through viem; the vault ABI lives here and only here
-src/lib/runtimeConfig.ts      reads api/config -- the addresses, the RPC endpoint, and whether this
-                              page has a route to the index service at all
+src/lib/runtimeConfig.ts      reads api/config -- the addresses, the RPC endpoint, whether this page
+                              has a route to the index service, and whether the index answers it
+                              reads are a SNAPSHOT rather than a live service
 src/lib/types.ts              every amount typed as a string
-test/                         203 tests across 8 files, incl. fixtures captured from the service
-tools/                        assert + capture + scenarios + static check (with --selftest) + runner
+test/                         243 tests across 10 files, incl. fixtures captured from the service
+tools/                        assert + capture + scenarios + static checks (one with --selftest) +
+                              the runner + check-published-snapshot (verifies a SERVED export)
 docs/                         the F1-F5 evidence trail
 ```
 
@@ -309,7 +333,9 @@ docs/                         the F1-F5 evidence trail
 services, so browser code stays same-origin and the index service keeps refusing cross-origin
 requests as it should. The **static export** omits the rewrites entirely — Next rejects an export
 that declares them, and a rewrite that cannot work is worse than an absent one — and adds the
-`basePath` a GitHub Pages project site needs.
+`basePath` a GitHub Pages project site needs. It also carries two switches that exist only for this
+workspace's sandbox (`NEXT_SKIP_TYPECHECK`, `NEXT_WORKER_THREADS`); the workflow sets neither, so
+what the workflow builds is the configuration with the rewrites omitted and nothing else.
 
 There *was* a server half: `src/lib/deployment.ts` read the record per request and the pages were
 server components, which is why absolute URLs mattered (a relative URL has no origin to resolve

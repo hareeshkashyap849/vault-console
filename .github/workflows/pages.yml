@@ -7,12 +7,41 @@
 # client component. What a server used to supply -- a per-request record read, a same-origin proxy
 # to the index service -- is either generated into the artifact or honestly reported as absent.
 #
-# THE INDEX SERVICE IS THE ONE THING THAT CANNOT COME ALONG
+# THE INDEX SERVICE IS THE ONE THING THAT CANNOT COME ALONG, SO THE BUILD TAKES A SNAPSHOT OF IT
 #
-# `--index null` is deliberate. A static host runs no process, so there is no route to the index,
-# and the panels say exactly that. Pointing `indexApiUrl` at a hosted service instead would work
-# the day such a service exists; until then, saying "this page has no route" is true and
-# "the index service is not reachable" would blame a service the page never asked.
+# A static host runs no process, so nothing on the published site can answer `/api/status` and
+# friends. The fix is not a client change and not a second implementation of the price formula:
+# this workflow **clones the index service, starts it against its committed SQLite snapshot, asks
+# it for its own answers, and writes those bytes into `public/api/`** -- where the static host
+# serves them at exactly the paths the console already requests.
+#
+# The constraint that decides the shape of this job: THE SNAPSHOT MUST BE PRODUCED BY THE SERVICE.
+# Reading `data/vault.sqlite` here and writing the JSON directly would work and would be wrong --
+# `src/api/price.ts` in `erc4626-vault-dapp` owns the share-price formula, and this console's
+# central design decision is that it READS that result rather than recomputing it. A second
+# implementation in a second repository would be a second source of truth for the vault's most
+# error-prone number.
+#
+# THE FIGURES ARE FROZEN, AND THE PAGE SAYS SO
+#
+# `--snapshot true` puts `indexSnapshot: true` into the generated config, and the panels label the
+# source as *a snapshot of the index service, taken when this page was published* rather than
+# *the index service, which lags by design*. The captured `staleSeconds` and `updatedAt` are passed
+# through UNCHANGED, so the age a reader sees grows as the page sits there -- which is true, and
+# better than a figure that always says "0s ago". `scripts/capture-index-snapshot.mjs` appends one
+# sentence to `status.note` saying the figures are a snapshot; the page renders that note verbatim.
+#
+# THE SERVICE IS STARTED WITH ITS CATCH-UP DISABLED, ON PURPOSE
+#
+# `MAX_CATCHUP_BLOCKS=0` makes the startup run bounded to one block, so the published figures are
+# exactly what the committed `data/vault.sqlite` holds and the build does not depend on how far the
+# indexer happens to get against a public RPC endpoint before this job times out. The snapshot's
+# own age is then VISIBLE (`staleSeconds`), which is the honest outcome: this is a snapshot of the
+# committed index, not a claim that the index is current.
+#
+# The `decimals()` read at startup is NOT disabled and cannot be: it is a chain read, `/api/price`
+# answers 503 without it, and the capture refuses a 503. So a build fails rather than publishing
+# prices derived from assumed decimals.
 name: pages
 
 on:
@@ -29,6 +58,18 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  # The two sibling repositories this build reads from. Named here rather than inline so the
+  # "where does this come from" question has one answer in this file.
+  #
+  # `erc4626-vault-dapp` holds the service AND the committed index snapshot at `data/vault.sqlite`
+  # (committed on purpose -- see that repository's `.gitignore`, which re-includes that one file
+  # and ignores every other database there). `erc4626-vault` holds `deployments/`, which is the
+  # single place the vault's address, chain and start block are known; the service reads its record
+  # from there rather than keeping a copy.
+  INDEX_REPO: https://github.com/hareeshkashyap849/erc4626-vault-dapp
+  VAULT_REPO: https://github.com/hareeshkashyap849/erc4626-vault
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,21 +83,107 @@ jobs:
 
       - run: npm ci
 
-      # The same checks `npm run check` runs: the arithmetic, then the type check, then the
-      # single-source checker. They run BEFORE the build, so a broken commit does not replace a
-      # working published site.
-      - name: Unit tests and the single-source checker
-        run: npm test && node tools/check-single-source.mjs
+      # Unit tests, then the type check, then the single-source checker -- the same three things
+      # `npm run check` runs and the same three the Pages workflow ran before. They run BEFORE the
+      # capture and the build, so a broken commit does not replace a working published site.
+      #
+      # `next build` runs the type check again on a real runner, so nothing is skipped here.
+      # (Locally it needs `NEXT_SKIP_TYPECHECK=1` because this workspace's sandbox forbids the pipes
+      # Next uses to capture the checker's output -- see next.config.ts.)
+      - name: Unit tests, type check, and the single-source checker
+        run: npm run check
 
-      # `next build` runs the type check on a real runner, so nothing is skipped here. (Locally it
-      # needs `NEXT_SKIP_TYPECHECK=1` because this workspace's sandbox forbids the pipes Next uses
-      # to capture the checker's output -- see next.config.ts.)
-      - name: Generate the runtime config from the committed deployment record
+      # `--depth 1` is enough: both files this build needs -- `data/vault.sqlite` and the service
+      # source -- are current on the default branch, because the index workflow commits the
+      # snapshot back to it every five minutes.
+      - name: Clone the index service and the vault repository's deployment records
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "$INDEX_REPO" "$RUNNER_TEMP/index"
+          git clone --depth 1 "$VAULT_REPO" "$RUNNER_TEMP/vault"
+          echo "index service at $RUNNER_TEMP/index"
+          echo "committed snapshot:"
+          ls -l "$RUNNER_TEMP/index/data/vault.sqlite"
+          echo "deployment record:"
+          cat "$RUNNER_TEMP/vault/deployments/base-sepolia.json" | head -12
+
+      # The service is started exactly as its own README documents -- no wrapper, no test harness.
+      # Everything that makes this a snapshot of the committed index rather than of the live chain
+      # is in the environment below.
+      - name: Take a snapshot from the service itself
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/index"
+
+          export DEPLOYMENT_RECORD="$RUNNER_TEMP/vault/deployments/base-sepolia.json"
+          export DATABASE_PATH="data/vault.sqlite"
+          export RPC_URL="https://sepolia.base.org"
+          export PORT="8787"
+          # One block of catch-up, not the default 300: the snapshot must be the committed index,
+          # and the build must not depend on how much of a public endpoint's budget is left.
+          export MAX_CATCHUP_BLOCKS="0"
+          export MAX_CATCHUP_SECONDS="0"
+          export NO_PROXY="127.0.0.1,localhost"
+          export no_proxy="127.0.0.1,localhost"
+
+          nohup node --no-warnings --experimental-strip-types src/api/cli.ts > "$RUNNER_TEMP/api.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/api.pid"
+
+          # Wait for /api/status, and only then capture. This script does not start anything, so
+          # a service that never came up has to be caught HERE, with its log.
+          ready=""
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:8787/api/status" > /dev/null 2>&1; then
+              ready="yes"
+              echo "the index service answered /api/status after ${attempt} attempt(s)"
+              break
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/api.pid")" 2>/dev/null; then
+              echo "the index service exited before it listened:" >&2
+              cat "$RUNNER_TEMP/api.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ -z "$ready" ]; then
+            echo "the index service never answered /api/status within 60s:" >&2
+            cat "$RUNNER_TEMP/api.log" >&2
+            exit 1
+          fi
+
+          # `$GITHUB_WORKSPACE`, not the current directory: the capture script lives in the console
+          # checkout and must be run from there, because `--out` is resolved against the caller's
+          # working directory.
+          node "$GITHUB_WORKSPACE/scripts/capture-index-snapshot.mjs" \
+            --service http://127.0.0.1:8787 \
+            --out "$GITHUB_WORKSPACE/public/api"
+
+          # Named, so a reader of the build log can see what was captured without downloading the
+          # artefact. The five files have no extension on purpose: the console fetches
+          # `api/status`, and a file named `status` is served at that path.
+          echo "--- captured snapshot ---"
+          ls -l "$GITHUB_WORKSPACE/public/api"
+
+      - name: Stop the index service
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/api.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/api.pid")" 2>/dev/null || true
+          fi
+          echo "--- index service log ---"
+          cat "$RUNNER_TEMP/api.log" 2>/dev/null || true
+
+      # `--index /` and `--snapshot true` are the pair that makes the pages tell the truth about
+      # this build: the index answers are same-origin files, and they are a snapshot.
+      # `--snapshot true` without `--index` is refused by the generator, and so is the reverse.
+      - name: Generate the runtime config for the published console
         run: |
           node scripts/build-runtime-config.mjs \
             --record deployments/base-sepolia.json \
             --rpc https://sepolia.base.org \
-            --index null \
+            --index / \
+            --snapshot true \
             --out public/api/config
 
       - name: Build the static export
@@ -64,12 +191,83 @@ jobs:
           STATIC_EXPORT: '1'
           # A project site is served from /<repo>/, so every asset URL and every client fetch has
           # to carry this prefix. Next rewrites <Link> and the router for it; the config loader
-          # reads it from the environment Next inlines.
+          # reads it from the environment Next inlines. It is also what makes the client's
+          # `api/status` request land inside the project directory rather than at the domain root.
           NEXT_PUBLIC_BASE_PATH: /vault-console
         run: npm run build
 
+      # The five snapshot files must be IN the artefact, not merely in `public/`. This asserts it
+      # where it matters -- a capture that wrote somewhere else, or a base path that moved the
+      # directory, would otherwise only show up as five 404s on the live site.
+      #
+      # Deliberately shell and one-line `node -p`, not a heredoc: a multi-line script inside a
+      # block scalar is where this file would be easiest to break, and every check here is a
+      # single fact about one JSON field.
+      - name: Check that the snapshot is in the export, and that it says what it is
+        run: |
+          set -euo pipefail
+          for name in status summary events price candles config; do
+            test -f "out/api/$name" || { echo "out/api/$name is missing from the export" >&2; exit 1; }
+          done
+          echo "out/api/ holds status, summary, events, price, candles and config"
+
+          snapshot=$(node -p 'JSON.parse(require("node:fs").readFileSync("out/api/config","utf8")).indexSnapshot')
+          test "$snapshot" = "true" || { echo "the published config does not say its index answers are a snapshot: indexSnapshot=$snapshot" >&2; exit 1; }
+          echo "config.indexSnapshot = $snapshot"
+
+          updated=$(node -p 'const s = JSON.parse(require("node:fs").readFileSync("out/api/status","utf8")); typeof s.updatedAt === "string" ? s.updatedAt : "MISSING"')
+          test "$updated" != "MISSING" || { echo "the published status has no updatedAt, so its age cannot be stated" >&2; exit 1; }
+
+          echo "indexed to block $(node -p 'JSON.parse(require("node:fs").readFileSync("out/api/status","utf8")).lastIndexedBlock')"
+          echo "events          $(node -p 'JSON.parse(require("node:fs").readFileSync("out/api/status","utf8")).eventCount')"
+          echo "snapshot taken  $updated"
+          echo "staleSeconds    $(node -p 'JSON.parse(require("node:fs").readFileSync("out/api/status","utf8")).staleSeconds')"
+
+          # The whole point of the capture: the events file is the SERVICE's answer, and it holds
+          # the real Deposit with its transaction hash. An empty `events` array would sail through
+          # every check above.
+          node -p 'const e = JSON.parse(require("node:fs").readFileSync("out/api/events","utf8")); `captured events: ${e.count}; first row: block ${e.events[0]?.blockNumber} ${e.events[0]?.kind} tx ${e.events[0]?.txHash}`'
+          test "$(node -p 'JSON.parse(require("node:fs").readFileSync("out/api/events","utf8")).count')" -gt 0 \
+            || { echo "the captured events file is empty; the index snapshot it came from may be empty too" >&2; exit 1; }
+
       - name: Show what will be published
         run: find out -maxdepth 2 -type f | sort | head -40
+
+      # The files existing is not the same as the files being SERVED. This starts a static server
+      # over `out/`, which maps a URL path to a file path with no extension guessing and no
+      # rewriting -- the way GitHub Pages serves it -- and then fetches the five snapshot paths plus
+      # `/api/config` over HTTP, WITH the query strings the console sends.
+      #
+      # `tools/check-published-snapshot.mjs` validates each body with `checkBody` FROM THE CAPTURE
+      # SCRIPT, so there is no second definition of "a valid snapshot", and it asserts the one fact
+      # no other check covers: that the served `/api/config` says `indexSnapshot: true`. Without
+      # that, the published pages would tell a reader their figures are live.
+      #
+      # The server is stopped in the same step, so a leaked process cannot hold the port for a
+      # later retry of this job.
+      - name: Serve the export and check the snapshot over HTTP
+        env:
+          NEXT_PUBLIC_BASE_PATH: /vault-console
+        run: |
+          set -euo pipefail
+          node "$GITHUB_WORKSPACE/toolchain/serve-static.mjs" out 8123 > "$RUNNER_TEMP/static.log" 2>&1 &
+          serve_pid=$!
+          trap 'kill "$serve_pid" 2>/dev/null || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:8123/api/config" > /dev/null 2>&1; then break; fi
+            if ! kill -0 "$serve_pid" 2>/dev/null; then
+              echo "the static server exited:" >&2
+              cat "$RUNNER_TEMP/static.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          node tools/check-published-snapshot.mjs --base http://127.0.0.1:8123
+
+          echo "--- what the static server was asked for ---"
+          cat "$RUNNER_TEMP/static.log"
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

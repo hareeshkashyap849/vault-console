@@ -50,12 +50,15 @@ through the generated runtime config instead of per request.**
 >
 > Still stale after all of those, found and not yet fixed: the header comment in
 > `src/app/layout.tsx` (it still says `/vault` and `/history` are server components),
-> `src/app/providers.tsx`'s own note about `page.tsx`, the header of
-> `web3-development-execute/projects/vault-console/scripts/build-runtime-config.mjs` (present tense
-> about the deleted `deployment.ts`), the name of
+> `src/app/providers.tsx`'s own note about `page.tsx`, the name of
 > one test in `test/api.test.ts` ("on the server"), and one dead arm of the `showsDeployment`
 > assertion in `tools/browser-assert.mjs` (it matches the deleted loader's message; the live
 > failure text is `Providers`' own).
+>
+> **One of those was fixed on 2026-09-17** while implementing the index snapshot, because the file
+> was being edited anyway for an unrelated reason: the header of
+> `web3-development-execute/projects/vault-console/scripts/build-runtime-config.mjs` now speaks in
+> the past tense about `src/lib/deployment.ts`, and says that it does. The other four are untouched.
 
 | File | Lines | What is stale |
 |---|---|---|
@@ -99,8 +102,12 @@ a service it never asked. Evidence: `verification/out/pages-live-console-values.
   export. They were written against the server-rendered pages; several will need updating for
   the client-rendered ones, and one of them is worth keeping precisely because it asserts the
   thing this migration risked.
-- `/history` on the published site has no data: a static host has no route to the index
-  service. Publishing a snapshot of the index output, and pointing the config at it, is the
-  next step and is the natural completion of the index-scale gap.
+- ~~`/history` on the published site has no data: a static host has no route to the index
+  service.~~ **Done (2026-09-17):** the build now captures the service's own answers into
+  `public/api/` and the pages label them as a snapshot — so this is no longer a page that shows
+  nothing, it is a page whose figures say when they were taken. Nothing in this file's reasoning is
+  affected (`indexApiUrl` and `no-route` still exist for a host with no route at all), and the
+  implementation, its measured evidence and the one endpoint not covered are recorded in
+  `web3-development-execute/projects/vault-console/docs/INDEX-SNAPSHOT-PLAN.md`.
 - The export's first paint is the loading screen (the addresses are read at runtime), so a
   reader without JavaScript sees "Loading the deployment record…" and nothing else.

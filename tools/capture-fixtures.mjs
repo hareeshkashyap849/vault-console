@@ -33,11 +33,27 @@ const apiBase = (apiFlag === -1 ? process.env.VAULT_API ?? 'http://127.0.0.1:878
 /**
  * The endpoints, with the arguments the console itself uses. Capturing a different query
  * than the page sends would produce a fixture that describes a request nobody makes.
+ *
+ * `events` was added later than the other four, and for a specific reason: its envelope
+ * (`filter`, `maxLimit`) is the one thing about this API that `EventResponse` was FIRST
+ * written without, from the route table's one-line description rather than from a response
+ * (`src/lib/types.ts` records it). A fixture is what makes that class of error visible, so the
+ * endpoint that got it wrong is exactly the one that has to have one.
+ *
+ * ONE THING TO KNOW BEFORE RUNNING THIS: it writes whatever the service you point it at
+ * answers, so it re-captures ALL FIVE files from ONE deployment. The four original fixtures
+ * are the local anvil deployment (chain 31337) and `test/contract.test.ts` asserts the vault
+ * address and the arithmetic that belongs to it; `events.json` as committed is from the Base
+ * Sepolia snapshot database (chain 84532). Capturing the two chains into one directory is
+ * therefore possible, and `contract.test.ts` states per fixture which chain it holds rather
+ * than assuming they agree. Run this against the deployment whose fixtures you mean to
+ * replace.
  */
 const endpoints = [
   ['status.json', '/api/status'],
   ['price.json', '/api/price?limit=1'],
   ['candles.json', '/api/candles?bucket=60&limit=5000'],
+  ['events.json', '/api/events?limit=50'],
   ['summary.json', '/api/summary'],
 ];
 

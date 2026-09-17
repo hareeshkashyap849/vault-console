@@ -146,6 +146,20 @@ The fix was to split "raw base unit" and "already formatted by the service" into
 > Writing `passed` in that column would be exactly the kind of record this project's discipline
 > forbids.
 >
+> **AMENDED 2026-09-17, and the sentence above is kept because it is what was true when it was
+> written.** A person **did** drive the published `/vault/manage` in a real browser that day and two
+> transactions landed: the chain shows the allowance moving `0 → 1000000` (1.0 USDC), the vault moving
+> 20 USDC / 20 shares → **21 / 21**, and a `Deposit` event on
+> `0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751` (block 46945096). **None of
+> the rows below changes from that alone**, because every one of them asserts *wording*, and the
+> session captured no page: no screenshot, no rendered text. It also left three things open — the
+> deposit's `from` and `to` were neither the connected account nor the vault (an intermediary is
+> involved and its role is not established), the approve's own hash was never identified, and the
+> `Deposit` log was not decoded. The rows that this touches say `partly measured` in
+> `web3-development-execute/projects/vault-console/BROWSER-TEST-PLAN.md` §5, which carries the
+> measurement and the open checks; **this file's status column deliberately still reads
+> `not measured`**, since wording is what it is about.
+>
 > The three read-path classes remain **measured against the running services**
 > (`docs/evidence/scenario-9-*.txt`, `scenario-10-*.txt`, `scenario-11-*.txt`, each with a
 > screenshot).

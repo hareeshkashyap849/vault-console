@@ -189,15 +189,72 @@ the console column means "the console errors and uncaught exceptions this page p
 > The wallet available for the browser run was MetaMask on Base mainnet (chain 8453) with **no account
 > authorised for the site**, so the page rendered its no-wallet branch throughout. The connected branch
 > compiles and typechecks and is asserted for its wording; it has **not been rendered live**.
+>
+> **Amendment, 2026-09-17: the wallet path was driven by hand against the published console, and two
+> transactions landed.** The paragraph directly above is true of the 2026-09-16 runs and false of the
+> session recorded here, so it is kept and this amendment is added rather than substituted — the same
+> treatment `docs/INDEX-SNAPSHOT-PLAN.md` gives its own superseded text. What follows is the
+> measurement, and then the checks that are still open. **No causal account of the session is written
+> anywhere below**: the mechanism is not established, and two earlier confident claims from that same
+> session had already been disproved by measurement, so a third would be worth less than the two that
+> were wrong.
+>
+> **The measurement — a person drove the published console's wallet page (`/vault/manage`) in a real
+> browser, on Base Sepolia (chain 84532), and direct reads of the chain afterwards show:**
+>
+> - the **allowance moved `0 → 1000000`** base units (1.0 USDC) for the account named below. The
+>   approve is confirmed **by state**, not by a receipt captured in the session.
+> - the **vault moved from 20 USDC / 20 shares to 21 USDC / 21 shares**, and
+>   `0x2aE746C0ff0295c2da1aC338656F247e9758E034` moved from **20 to 21 shares**. That is the result
+>   the deposit row asks for, read from the chain rather than read off the page.
+> - a **successful transaction
+>   `0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751` (block 46945096) emitted the
+>   vault's `Deposit` event**.
+> - the account used, `0x2aE746C0ff0295c2da1aC338656F247e9758E034`, is **this workspace's own testnet
+>   deploy key**. That identifies whose key was used; it says nothing about how the call was relayed.
+>
+> **What is NOT resolved, and must not be read as settled by any of the above:**
+>
+> - **the deposit was executed through an intermediary contract.** The deposit transaction's `from`
+>   was `0xC066ac5D385419B1A8c43A0E146fA439837a8B8c` and its `to` was
+>   `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3`. **Neither is the connected account and neither is
+>   the vault**, so the vault's `Deposit` event was not emitted by a direct call from the account the
+>   page had connected. What put those two addresses between the page and the vault is **unknown**.
+> - **the approve's own transaction hash was never identified.** The allowance change is confirmed by
+>   state; the transaction that produced it has not been looked up.
+> - **the `Deposit` event's decoded `owner` / `assets` / `shares` have not been read back.** The event
+>   is known to have been emitted; its arguments are not recorded.
+> - **two different failures were observed earlier in the same session, and are unexplained**:
+>   `Chain must support EIP-7702 for sponsored or gas included transaction`, and
+>   `insufficient funds for gas * price + value: have 352712045842 want 898152800000`. **Their order
+>   and their cause are not established**, and neither is which attempt produced which.
+> - **nothing captured the page.** No screenshot, no `tools/browser-assert.mjs` run, and no console
+>   capture is behind any of the above. The rendered text of the connected branch — the balance line,
+>   the allowance line, the receipt phase, any failure wording — was **not recorded**, so every row
+>   below that asserts *wording* is still `not measured` even where the state change it describes is
+>   now confirmed by the chain.
+>
+> **The open checks, in the order they would settle it:**
+>
+> 1. `eth_getCode` on `0x2aE746C0ff0295c2da1aC338656F247e9758E034` — a `0xef0100` prefix would mean the
+>    account carries an **EIP-7702 delegation**, which is one thing that would put a different `from`
+>    and a different `to` on a call the page appeared to make.
+> 2. identify the two intermediary addresses,
+>    `0xC066ac5D385419B1A8c43A0E146fA439837a8B8c` and `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3` —
+>    whether they hold code, and what they are.
+> 3. decode the `Deposit` log of the transaction above (`owner` / `assets` / `shares`).
+>
+> Until all three are done, the honest reading of the session is: **state changed, a `Deposit` event
+> was emitted, and the path from the connected account to that event is not established.**
 
 | # | Failure class | How it is injected | What is asserted (wording + rendered result + state) | Evidence requirement | Status |
 |---|---|---|---|---|---|
 | 1 | Wallet not installed | Open `/vault/manage` in a browser with no extension | `"No injected wallet was found in this browser. This app uses injected() …"`, and the deposit and redeem controls stay inert rather than accepting input that could never be signed | screenshot: **not run** | **implemented; interaction not measured** |
 | 2 | The user refuses to sign (`4001`) | Reject at the MetaMask prompt | A **neutral** line, never a red failure; the form returns to idle and says the user cancelled and nothing was signed. `mapWriteError` checks `4001` first so no later branch can reclassify it | screenshot: **not run** | **logic proven** (`test/wallet-flow.test.ts`: *a user rejection is its own phase, not a failure*, and the nested-cause case); **interaction not measured** |
 | 3 | Wrong chain | Wallet on chain 8453, page expecting 31337 | The controls are **disabled with a reason naming both chains** — *"Switch the wallet to chain 31337 — it is currently on chain 8453, where this deployment does not exist. Nothing is sent until it does."* — and **no wallet prompt appears** | screenshot: **not run** + transaction hash: **not applicable, nothing is sent** | **logic proven** (`decideDeposit` → `wrong-chain`, and it outranks an unparseable amount); **interaction not measured** |
-| 4 | Insufficient allowance | Fresh wallet, zero allowance, then deposit | The **approve step is offered instead of a deposit**; a deposit that would revert with `ERC20InsufficientAllowance` is never sent | screenshot: **not run** | **logic proven**, including the case where the allowance was consumed and must be re-read; **interaction not measured** |
+| 4 | Insufficient allowance | Fresh wallet, zero allowance, then deposit | The **approve step is offered instead of a deposit**; a deposit that would revert with `ERC20InsufficientAllowance` is never sent | screenshot: **not run** | **logic proven**, including the case where the allowance was consumed and must be re-read; **partly measured 2026-09-17** — a person deposited from a zero allowance and the chain now reports **`1000000`** (1.0 USDC) on the account named in the amendment above, so the approve really did run and change state. **The page's wording was not captured** and the approving transaction's hash was never identified, so the row's own claim about what the form *offers* is still unmeasured |
 | 5 | Insufficient balance | Enter more than the wallet holds | The reason carries the **real balance, formatted** (`5555.0759` and the symbol), never the bare word "insufficient"; refused **before** any approval, because an approval needs no balance and approving first would spend gas to learn a free fact | screenshot: **not run** | **logic proven** (`decideDeposit` → `exceeds-balance`, and the balance check is asserted to win over the allowance check); **interaction not measured** |
-| 6 | Insufficient gas | Drain the wallet's ETH, then deposit | **No dedicated copy: this is a recorded gap.** The app does not pre-compute gas, so an under-funded wallet fails at the wallet or the node and that error arrives through the failure path | screenshot: **not run** | **not implemented as a pre-flight check** |
+| 6 | Insufficient gas | Drain the wallet's ETH, then deposit | **No dedicated copy: this is a recorded gap.** The app does not pre-compute gas, so an under-funded wallet fails at the wallet or the node and that error arrives through the failure path | screenshot: **not run** | **not implemented as a pre-flight check**. **One such failure was observed verbatim on 2026-09-17** — `insufficient funds for gas * price + value: have 352712045842 want 898152800000` (see the amendment above) — which is evidence the error does reach the failure path. It is **not** evidence about what this app renders for it: the session left that failure's order and cause unresolved and captured no rendered text |
 | 7 | Transaction reverted | Force a revert, or deposit with an allowance that becomes insufficient | `"The chain reverted this transaction."` with the hash **kept** so it can be looked up, and viem's text in a collapsed `detail`. `mapReceipt` maps `'reverted'` to `failed` — **never** to `confirmed`, and never to still-pending | screenshot: **not run** + transaction hash: **not run** | **logic proven**; **interaction not measured** |
 | 8 | Transaction replaced (`replaced`) | Replace a pending transaction in the wallet | **No dedicated state: a recorded gap.** It surfaces as an unread receipt — *"The transaction was sent, but its receipt could not be read. It may still be on chain -- the explorer or a node will say which."* — which names the uncertainty instead of claiming a failure | screenshot: **not run** | **no dedicated state; recorded as a gap** |
 | **9** | **RPC unreachable** | the console instance's `VAULT_RPC` points at a **port nothing listens on**, `http://127.0.0.1:8547` (the index service stays healthy). Cleaner than stopping anvil: it does not disturb the live chain that other evidence in the same session depends on. Stopping the real anvil is equivalent — either way the console sees a refused connection | ① the `Now` panel shows **"The chain could not be read."**, immediately followed by the sentence **"The chain node at http://127.0.0.1:8547 is not reachable. Check that a node is listening there and that VAULT_RPC points at it."**, and labels it with `endpoint` and `class: unreachable`; ② the page still returns **HTTP 200** (not 500); ③ the **`Then` panel still renders the chart** (one body per candle, no empty state) with `Indexed to block` and `Lag` still shown — this one is the point of the row: it proves the two sources fail independently; ④ the `Two sources` panel shows **"A comparison needs both sources. One of them is unavailable, so this panel does not guess."** | Screenshot: `docs/evidence/scenario-9-chain-down.png`; report: `docs/evidence/scenario-9-chain-down.txt` (exit 0); console: see §7 | **Passed** 2026-09-16 |
@@ -234,15 +291,21 @@ the console column means "the console errors and uncaught exceptions this page p
 
 | Step | Action | Assertion | Evidence | Status |
 |---|---|---|---|---|
-| 1 | Connect wallet | **Now applicable**: `/vault/manage` offers a connect control, and after connecting it shows the address and the wallet's chain rather than a dash. The **connected branch has never been rendered live** — the wallet available for testing had no account authorised for the site | screenshot: **not run** | **implemented; interaction not measured** |
-| 2 | Approve | **Now applicable**: a deposit with an insufficient allowance offers the approve step first, and after the approval confirms the allowance is **re-read** rather than remembered | screenshot: **not run** | **logic proven**; **interaction not measured** |
-| 3 | Deposit | **Now applicable**: `deposit(uint256 assets, address receiver)` with the connected account as receiver. Would be evidenced by a **transaction hash, block number and `Deposit` event**, cross-checked against the chain's `totalAssets` before and after | screenshot: **not run** + tx hash: **not run** | **implemented; interaction not measured** |
+| 1 | Connect wallet | **Now applicable**: `/vault/manage` offers a connect control, and after connecting it shows the address and the wallet's chain rather than a dash. The connected branch **did render live on 2026-09-17** — a person connected a wallet to the published page and drove a deposit through it (see §5's amendment) — but **nothing captured that render**, so the row's assertion about what the page *shows* is still unmeasured. The 2026-09-16 runs exercised the no-wallet branch only | screenshot: **not run** | **implemented; the connection is confirmed by what followed it, the render is not captured** |
+| 2 | Approve | **Now applicable**: a deposit with an insufficient allowance offers the approve step first, and after the approval confirms the allowance is **re-read** rather than remembered | screenshot: **not run** | **logic proven**; **partly measured 2026-09-17** — the allowance moved **`0 → 1000000`** (1.0 USDC), so an approval really was sent and the chain shows its effect. **The approving transaction's hash was never identified**, and "re-read rather than remembered" is a statement about the UI that no capture covers |
+| 3 | Deposit | **Now applicable**: `deposit(uint256 assets, address receiver)` with the connected account as receiver. Would be evidenced by a **transaction hash, block number and `Deposit` event**, cross-checked against the chain's `totalAssets` before and after | screenshot: **not run**; transaction hash: **`0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751` (block 46945096)** | **measured 2026-09-17, on the chain**: the vault moved 20 USDC / 20 shares → **21 / 21**, the account in §5's amendment moved 20 → **21 shares**, and that transaction emitted the vault's `Deposit` event. **What it does not establish**: the transaction's `from` and `to` were neither the connected account nor the vault (so it went through an intermediary), the `Deposit` log's `owner` / `assets` / `shares` were not decoded, and no screenshot of the page was taken — see the amendment above for the open checks |
 | 4 | Redeem | **Now applicable**: `redeem(uint256 shares, address receiver, address owner)`, one transaction with no approval | screenshot: **not run** + tx hash: **not run** | **implemented; interaction not measured** |
 | 5 | **The page reading exactly equals the chain** | **Applicable and already run**: the assertion reads anvil's `eth_call totalSupply()` (`0x18160ddd`) and compares it with the **share string on the rendered page**. Precision handling: the chain holds a raw uint256, the page holds a decimal string with trailing zeros stripped, and the two are made equivalent through `formatBaseUnits` | **Passed**. Measured: chain `859021905704231281673` ↔ page `859.021905704231281673`. (This row previously printed the chain value as `859021905704281673` — 18 digits, missing `4231`. The raw evidence and a live `eth_call` both give 21 digits; a truncated figure inside a row about exact equality was the worst possible place to have one) | `totalSupply rendered as SHARES…` in `docs/evidence/browser-assert.txt` | **Passed** |
 
-> Steps 1–4 of I3 are not applicable because **this project is not the vehicle for an end-to-end
-> transaction flow**.
-> The real end-to-end transaction evidence lives in `erc4626-vault` (real wallet + real chain + a transaction hash you can look up).
+> Steps 1–4 of I3 **were** not applicable while **this project was not the vehicle for an end-to-end
+> transaction flow** — that was true when `/vault/manage` did not exist, and the four rows above have
+> said "Now applicable" since it arrived, which made this note stale in the opposite direction from
+> the rest of the file. **As of 2026-09-17 steps 1–3 are applicable and partly measured** (see §5's
+> amendment): the deposit is evidenced by a transaction hash, a block number and a `Deposit` event,
+> with the caveats recorded in row 3 above; step 4 (redeem) remains applicable and unmeasured.
+> The real end-to-end transaction evidence for a *direct* account-to-vault deposit still lives in
+> `erc4626-vault` (real wallet + real chain + a transaction hash you can look up) — what the session
+> recorded here adds is that the console's own page was driven at all.
 > Step 5 is "exactly equal" — this project **is exact**; it did not settle for "about the same" or "equal after rounding".
 
 **I4 failure scenarios (G-I4: each of the four failure classes has evidence, and the interface must produce a readable error rather than going silent)**
@@ -278,20 +341,27 @@ the console column means "the console errors and uncaught exceptions this page p
 ## 8. The G-F4 gate
 
 - [x] all four layers L1–L4 have a report; L2 is a **real browser** (the user's real Chrome driven by kimi-webbridge, not jsdom)
-- [ ] **none of §5's 11 rows is `not run`** — **NOT SATISFIED as of 2026-09-16.** Rows 9, 10 and 11 are passed by measurement; rows 1–5 and 7 are `logic proven` with their wallet interaction **not measured**; row 6 is **not implemented as a pre-flight check**; row 8 has **no dedicated state**. Eight rows no longer carry a blanket "not applicable", and the four that need a real wallet say so instead of claiming a pass
+- [ ] **none of §5's 11 rows is `not run`** — **NOT SATISFIED as of 2026-09-16, and still not satisfied after 2026-09-17.** Rows 9, 10 and 11 are passed by measurement; rows 1, 2, 3, 5, 7 and 8 have `logic proven` pre-flight decisions and **no measured interaction at all**; row 6 is **not implemented as a pre-flight check** (though one real insufficient-funds error was observed — see §5's amendment); row 8 has **no dedicated state**. **Row 4 and §6's step 2/3 changed on 2026-09-17**: a person drove the published wallet page, and the chain confirms the allowance moved `0 → 1000000` and the vault and the account both moved 20 → 21, with the `Deposit` event on a named transaction — but no screenshot and no decoded log came out of it, so the rows are marked `partly measured` rather than passed, and the amendment in §5 lists what is still open
 - [x] every failure case **that has been run** has a screenshot — `scenario-9-chain-down.png`,
       `scenario-10-index-down.png`, `scenario-11-data-freshness.png`, and for the history page
       `scenario-12-history-up.png` (three tables, each stating how much it is showing) and
       `scenario-13-history-index-down.png` (the index gone, and **no** figures rendered at all).
       All five are produced by `node tools/capture-screenshots.mjs`, which names each URL, waits for
       the page's own content, and writes the file — so they can be re-taken after any change. The
-      wallet rows have **no screenshot** because they were not run
+      wallet rows have **no screenshot**: rows 1, 2, 3, 5, 7 and 8 have never been run at all, and
+      the 2026-09-17 session that did drive rows 4 and 6 (§5's amendment) captured no page at all
 - [x] console errors "empty or explainable" — §7 records five items. **Console events are still not captured
       directly** (residual gap, see the end of §7); the substitute is asserting that the page text carries no error and no hydration hint
 - [x] §1 records who ran it, how, and on what date (the author, 2026-09-16, run from inside the restricted shell,
       with the browser started by the daemon outside the sandbox, **no privilege escalation**)
 
 **G-F4 conclusion**: **NOT passed — one row is a real gap and four rows need a wallet.** 2026-09-16, the author.
+**Amended 2026-09-17, and still NOT passed.** The four wallet rows no longer need a wallet to be
+*reached*: a person drove the published wallet page and two transactions landed, which the chain
+confirms (§5's amendment). What they still need is a **capture** — a screenshot, the approving
+transaction's hash, the decoded `Deposit` log, and an account of how the deposit's `from` and `to`
+came to be neither the connected account nor the vault — before any of them can be called passed. Row 6
+(insufficient gas) is untouched as a pre-flight gap, and rows 1, 2, 3, 5, 7 and 8 remain unmeasured.
 
 **What is genuinely proven.** 51 browser assertions pass against the **production build** (not just the dev
 server), and they are re-runnable with one command: `node tools/browser-assert.mjs --url http://127.0.0.1:3121`.
@@ -302,10 +372,16 @@ arithmetic back off the painted DOM — the count label against the rows actuall
 sum against the rendered per-kind counts. The pre-flight decisions behind the wallet rows are proven in unit
 tests.
 
-**What is not.** No transaction has been sent from this page. The four wallet rows in §5 and the four I3 steps
-above are `not measured` because MetaMask shows a popup and a person clicks Approve — a program cannot do it.
-The page's connected branch has never rendered live either: the wallet available had no account authorised for
-the site, so every browser run exercised the no-wallet branch only.
+**What is not.** No transaction had been sent from this page when this paragraph was written; **on
+2026-09-17 one was, and two transactions landed** (§5's amendment). The four wallet rows in §5 and
+the four I3 steps above were `not measured` because MetaMask shows a popup and a person clicks
+Approve — a program cannot do it — and for rows 1, 2, 3, 5, 7 and 8 that reasoning still holds
+exactly: no person has driven those cases. What changed is rows 4 and 6 and I3's steps 2 and 3, and
+what is missing there is not a wallet but a **capture**: the connected branch **did** render live in
+that session (the deposit went through it) and **nothing recorded what it rendered**, so every
+wording assertion in the wallet rows is still unmeasured even where the chain now confirms the state
+change. The paragraph above is kept rather than rewritten because it is the accurate record of the
+2026-09-16 position, and the difference between the two is the whole point of this amendment.
 
 **This conclusion was previously `passed`, and that was correct for what the project was.** It was a read-only
 console, so the wallet classes genuinely did not exist and rows 9–11 were the whole applicable set. Adding
@@ -314,7 +390,7 @@ without saying so would be worse than either value.
 **Row 9's measurement caught a real defect** (the failure panel smearing viem's whole diagnostic dump
 across the screen), which was fixed and covered by 3 regression tests; see item 5 in §7.
 
-**How the conclusion moved, twice.** An earlier round recorded G-F4 as **not passed**, because although rows
+**How the conclusion moved, three times.** An earlier round recorded G-F4 as **not passed**, because although rows
 9–11 had their implementation ready and their wording settled, they had **not actually been run even once** —
 the reason recorded at the time was that stopping the services would interrupt the live services that other
 evidence in the same session depended on. That reason held, and the fix was **a different injection method**:
@@ -328,10 +404,22 @@ Then the gate went back to **not passed**, for a different and better reason: th
 so four rows that used to be `not applicable` are now `not measured`. The three read-path rows are unaffected
 by that.
 
+**And on 2026-09-17 it stayed not passed for a third and narrower reason.** Someone drove the published wallet
+page by hand, so "no person has tried" stopped being the obstacle for two of the rows and for two of I3's steps:
+the chain confirms the allowance moved `0 → 1000000` and that the vault and the account both moved 20 → 21 with
+the `Deposit` event on a named transaction (§5's amendment). What is still missing is the evidence a reader can
+check row by row — no screenshot, no identified hash for the approve, no decoded `Deposit` log, and no
+explanation of why the deposit's `from` and `to` were neither the connected account nor the vault. A state change
+without a captured interface is a measurement of the **chain**, not of **this page**, and this file does not
+count one as the other.
+
 **Residual gaps recorded honestly** (they are separate from the wallet gap above):
 - end of §7: **console events are not captured directly**. kimi-webbridge's `evaluate` cannot look back at console
   output that already happened, so the substitute evidence is "assert that the page text carries no error and no hydration hint".
 - the remaining unverified items in `EVIDENCE-MAP.md` §3 (the accessibility baseline, a non-flat real dataset, whether the coverage gap is unavoidable).
 
-> Path D's I3/I4 reuse this file: I3's step 5 (exact equality) is **passed**, steps 1–4 are not applicable;
+> Path D's I3/I4 reuse this file: I3's step 5 (exact equality) is **passed**, and steps 1–3 are **applicable**
+> (steps 2 and 3 partly measured on 2026-09-17 — see §5's amendment) while step 4 (redeem) is applicable and
+> unmeasured — the note at the end of §6 above carries the correction, because an earlier version of this line
+> still said steps 1–4 were not applicable after §6's table had begun to say "Now applicable";
 > of I4's four classes, two rows are not applicable and two are **not run** (they share their origin with rows 9 and 10 in §5).

@@ -32,6 +32,28 @@ out/
 #   node scripts/build-runtime-config.mjs
 public/api/config
 
+# The captured index snapshot, written by `scripts/capture-index-snapshot.mjs` and published by
+# the Pages workflow. Ignored for a sharper version of the reason above: these files ARE the
+# figures the site shows, frozen at the moment of one build. Committed, they would be a second
+# copy of the index that nothing updates and nothing ages -- the page reads its own `updatedAt`
+# and `staleSeconds` from whichever copy it was served, so a stale committed one would look
+# exactly like a fresh one while being months old. That is the specific failure this project
+# keeps writing down, and the fix is that the snapshot only ever exists as a build artifact.
+#
+# Capture locally with the service running:
+#   node scripts/capture-index-snapshot.mjs --service http://127.0.0.1:8787 --out public/api
+#
+# ALL FIVE, and `candles` was missing from this list until it was added here: the path was added
+# to the capture, the workflow and the README when the chart was brought into the snapshot, and
+# this list -- the one place whose whole job is to keep the snapshot out of version control -- was
+# not updated with it. `public/api/candles` was therefore the single file of the five that `git
+# add` would have taken, which is exactly the case the paragraph above says must not happen.
+public/api/status
+public/api/summary
+public/api/events
+public/api/price
+public/api/candles
+
 # The static export, and the staging directory the Pages workflow builds it in.
 out/
 _site/

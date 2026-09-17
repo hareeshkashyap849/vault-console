@@ -45,6 +45,9 @@ const CONFIG: RuntimeConfig = {
   rpcUrl: 'http://127.0.0.1:8545',
   walletRpcUrl: 'http://127.0.0.1:8545',
   indexApiUrl: '/',
+  // Development reads a running service, so the panels say "the index service, which lags by
+  // design" rather than "a snapshot". See `RuntimeConfig.indexSnapshot`.
+  indexSnapshot: false,
 };
 
 const indexApi = createIndexApi(CONFIG);

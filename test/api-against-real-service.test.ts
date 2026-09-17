@@ -59,7 +59,9 @@ const indexApi = createIndexApi({
   rpcUrl: 'http://127.0.0.1:8545',
   walletRpcUrl: 'http://127.0.0.1:8545',
   indexApiUrl: apiBase(),
-} as RuntimeConfig);
+  // A real service answering a real request: not a snapshot.
+  indexSnapshot: false,
+} satisfies RuntimeConfig);
 
 if (!reachable) {
   console.log(

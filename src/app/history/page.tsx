@@ -96,9 +96,25 @@ export default function Page() {
     <main className="mx-auto max-w-6xl px-6 py-10">
       <header className="mb-8">
         <h1 className="text-xl font-semibold text-slate-100">Indexed History</h1>
+        {/*
+          WHAT "READ FROM THE INDEX SERVICE" MEANS ON THIS BUILD.
+
+          The paragraph below makes the page's central claim -- one source, no chain reads -- and
+          `indexSnapshot` changes what that source IS. On the published export the answers were
+          captured by the build and served as files, so "read from the index service" would be
+          true about the PROVENANCE and misleading about the AGE: nothing is running behind this
+          page, and the figures stop at the moment it was published. The `source` row in the
+          list underneath says `index service snapshot` for the same reason, so the header does
+          not contain one label that says snapshot next to another that does not.
+        */}
         <p className="mt-1 text-sm text-slate-400">
-          Read from the index service alone. Nothing on this page was read from the chain, so every figure is
-          exact for the block it names and no later — including the counters at the top.
+          {runtime.indexSnapshot
+            ? 'Read from a snapshot of the index service, taken when this page was published. Nothing is live here: ' +
+              'the figures are frozen at that moment, and the age of the snapshot is below. Nothing on this page was ' +
+              'read from the chain, so every figure is exact for the block it names and no later — including the ' +
+              'counters at the top.'
+            : 'Read from the index service alone. Nothing on this page was read from the chain, so every figure is ' +
+              'exact for the block it names and no later — including the counters at the top.'}
         </p>
         <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
           <div className="flex gap-1.5">
@@ -109,7 +125,7 @@ export default function Page() {
           </div>
           <div className="flex gap-1.5">
             <dt>source</dt>
-            <dd className="text-slate-400">index service</dd>
+            <dd className="text-slate-400">{runtime.indexSnapshot ? 'index service snapshot' : 'index service'}</dd>
           </div>
           <div className="flex gap-1.5">
             <dt>record</dt>

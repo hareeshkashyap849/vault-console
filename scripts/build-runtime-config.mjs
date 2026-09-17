@@ -3,13 +3,16 @@
  *
  * WHY A GENERATED FILE AND NOT `next.config.ts`
  *
- * The console is a Next.js app with server components. In that shape the deployment record
- * is read per request (`src/lib/deployment.ts`), the index service is reached through a
- * rewrite, and the chain's identity is inlined at build time through `NEXT_PUBLIC_*`. All
- * three depend on a server existing at request time.
+ * The console WAS a Next.js app with server components: the deployment record was read per request
+ * by `src/lib/deployment.ts` (since deleted -- a module that reads the record per request
+ * contradicts the architecture), the index service was reached through a rewrite, and the chain's
+ * identity was inlined at build time through `NEXT_PUBLIC_*`. All three need a server existing at
+ * request time, and the published console has none. Written in the past tense on purpose:
+ * `docs/STATIC-EXPORT-MIGRATION.md` recorded this header as still speaking in the present tense
+ * about a module that no longer exists.
  *
  * A static export has no server. So the same facts are written to a file that the browser
- * fetches, and the pages become client components that read it. The record stays the single
+ * fetches, and the pages are client components that read it. The record stays the single
  * source: this script reads `deployments/<chain>.json` and writes what the record says, and
  * it re-reads its own output and compares before reporting success.
  *
@@ -28,6 +31,18 @@
  * so the service keeps refusing cross-origin requests, as designed). The static build passes
  * `--index null`.
  *
+ * WHY THERE IS ALSO `indexSnapshot`
+ *
+ * `indexApiUrl` alone cannot say WHERE the answers come from, and on the published console they
+ * no longer come from a running service: the build captures the service's own responses into
+ * `public/api/` and the static host serves those files at the same paths
+ * (`scripts/capture-index-snapshot.mjs`, and the Pages workflow's step that runs it). So the
+ * config carries `indexSnapshot`, and the pages label the source accordingly -- "a snapshot of the
+ * index service, taken when this page was published" instead of "the index service, which lags by
+ * design". Those are different claims about the same figures and a reader must not have to infer
+ * which one holds. `--snapshot` sets it; it defaults to FALSE, because a config that claimed a
+ * snapshot without one having been taken would be the console inventing a provenance.
+ *
  * Usage:
  *   node scripts/build-runtime-config.mjs                       # dev defaults
  *   node scripts/build-runtime-config.mjs \
@@ -35,6 +50,7 @@
  *     --rpc https://sepolia.base.org \
  *     --index null \
  *     --out public/api/config
+ *   node scripts/build-runtime-config.mjs --index / --snapshot  # the published console
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -88,6 +104,42 @@ if (indexApiUrl !== null && !/^(https?:\/\/|\/)/.test(indexApiUrl)) {
   process.exit(2);
 }
 
+/**
+ * Whether the index answers this build reads are a SNAPSHOT taken during the build.
+ *
+ * Default false. `--snapshot` (bare flag) or `--snapshot true` sets it. It is not derived from
+ * `--index`: a path or URL says where the answers are, and both a live service and a directory of
+ * captured files answer at such a path. Only the build knows which it just produced, so the build
+ * has to say.
+ */
+const snapshotFlags = process.argv.filter((arg) => arg === '--snapshot').length;
+if (snapshotFlags > 1) {
+  console.error('--snapshot was given more than once. A build is either a snapshot or it is not.');
+  process.exit(2);
+}
+const snapshotIndex = process.argv.indexOf('--snapshot');
+const snapshotValue = snapshotIndex === -1 ? false : (process.argv[snapshotIndex + 1] ?? 'true');
+const indexSnapshot = snapshotValue === true || snapshotValue === 'true';
+
+if (snapshotIndex !== -1 && !indexSnapshot && snapshotValue !== 'false') {
+  console.error(`--snapshot must be true or false (or a bare flag), got ${JSON.stringify(snapshotValue)}`);
+  process.exit(2);
+}
+
+// A SNAPSHOT NEEDS SOMEWHERE TO HAVE COME FROM. With `indexApiUrl: null` the client makes no
+// request at all, so `indexSnapshot: true` would be a provenance claim about figures nothing can
+// reach -- the pages would say "read from a snapshot" and then show the no-route message. Refused
+// rather than downgraded silently: whichever of the two flags is wrong, a person meant something
+// and a quiet fallback would hide which.
+if (indexSnapshot && indexApiUrl === null) {
+  console.error(
+    '--snapshot was passed together with --index null, which is a contradiction:\n' +
+      '  a snapshot is served at the paths the console fetches, so the config must point at them.\n' +
+      '  Pass --index / (the published export) or drop --snapshot.',
+  );
+  process.exit(2);
+}
+
 const config = {
   // The record's own fields, minus the ABI: the console reads the chain through viem with
   // function signatures, so the artifact's ABI would be dead weight in a file the browser
@@ -106,6 +158,9 @@ const config = {
   rpcUrl,
   walletRpcUrl: record.walletRpcUrl ?? record.rpcUrl ?? rpcUrl,
   indexApiUrl,
+  // Where the index answers come from: a running service (false) or files captured by the build
+  // (true). The pages change one label on it and nothing else -- see `src/lib/runtimeConfig.ts`.
+  indexSnapshot,
 };
 
 mkdirSync(dirname(outPath), { recursive: true });
@@ -113,8 +168,13 @@ writeFileSync(outPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
 
 // Re-read and compare. A generator that reports success without checking its own output is
 // a generator that reports success.
+//
+// `indexSnapshot` is compared here, and that is the point of it being in this list: the artifact
+// on disk is the only thing the browser ever sees, so the flag must be read back OUT of the file
+// rather than trusted from the variable that wrote it. A build cannot then disagree with the
+// artifact it produced.
 const written = JSON.parse(readFileSync(outPath, 'utf8'));
-const mismatches = ['chainId', 'vault', 'asset', 'deployBlock'].filter((f) => written[f] !== config[f]);
+const mismatches = ['chainId', 'vault', 'asset', 'deployBlock', 'indexSnapshot'].filter((f) => written[f] !== config[f]);
 if (mismatches.length) {
   console.error(`the written config disagrees with the record on: ${mismatches.join(', ')}`);
   process.exit(1);
@@ -125,4 +185,7 @@ console.log(`chain         ${config.chainId} (${config.chainName})`);
 console.log(`vault         ${config.vault}`);
 console.log(`reads go to   ${config.rpcUrl}`);
 console.log(`index service ${config.indexApiUrl ?? '(none: panels will say there is no route)'}`);
+console.log(
+  `index answers ${config.indexSnapshot ? 'a SNAPSHOT captured by this build (the panels say so)' : 'a running service (live)'}`,
+);
 console.log(`written       ${outPath}`);
