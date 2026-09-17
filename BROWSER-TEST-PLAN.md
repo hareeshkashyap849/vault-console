@@ -275,7 +275,13 @@ the console column means "the console errors and uncaught exceptions this page p
 > - The same delegation is visible in the deposit transaction's own envelope: `cast tx
 >   0xbcc9f564…` reports `type: 0x4` (a SetCode transaction, the EIP-7702 transaction type) and an
 >   `authorizationList` whose single entry names chain `0x14a34` (84532) and address
->   `0x63c0c19a282a1b52b07dd5a65b58948a07dae32b` — the same delegate the account's code points at.
+>   `0x63c0c19a282a1b52b07dd5a65b58948a07dae32b` — the same delegate the account's code points at,
+>   with tuple nonce `0x5`. That tuple nonce is a second, independent corroboration, because EIP-7702
+>   requires the authorisation's nonce to equal the account's: `eth_getTransactionCount
+>   0x2aE7…E034 latest` is now **`0x6` (6)** — exactly that 5 plus this one transaction. The
+>   delegation in the account's code and the delegation in this transaction's envelope are therefore
+>   the same delegation, and the account was a delegated account when the deposit ran, not merely
+>   afterwards.
 >
 > **2. The two intermediary addresses, each from the chain rather than from its shape.**
 >
@@ -302,7 +308,10 @@ the console column means "the console errors and uncaught exceptions this page p
 > `cast receipt 0xbcc9f564938b4b8dc58792a4d47af22e997236ee7492e3ddfa498b263eb36751`
 > (`status 0x1`, block `0x2cc5348` = **46945096**, `from` `0xC066ac5D…`, `to` `0xdb9B1e94…`,
 > `type 0x4`, five logs). The vault's `Deposit(address indexed sender, address indexed owner,
-> uint256 assets, uint256 shares)` is `log[3]`, `address 0x7941438ee07bea4469ccd4bec583e9fb24037f35`:
+> uint256 assets, uint256 shares)` is `log[3]`, `address 0x7941438ee07bea4469ccd4bec583e9fb24037f35`,
+> with `topic[0]` = `0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7`, and
+> `cast keccak "Deposit(address,address,uint256,uint256)"` returns exactly that hash — so the
+> signature above is the one this log actually carries, not the one it was assumed to carry:
 >
 > | Field | Raw value | Read as |
 > |---|---|---|
