@@ -3,6 +3,20 @@
 A React/Next.js front end over an ERC-4626 vault: a read-only console, an indexed history, and a
 wallet page that deposits and redeems.
 
+**Live:** <https://hareeshkashyap849.github.io/vault-console/> — published as a **static export** on
+GitHub Pages. No server runs: the addresses come from the deployment record at build time
+(`scripts/build-runtime-config.mjs` writes `public/api/config`) and the chain is read by the browser
+from `https://sepolia.base.org`. The vault is
+[`0x7941438ee07bea4469ccd4bec583e9fb24037f35`](https://sepolia.basescan.org/address/0x7941438ee07bea4469ccd4bec583e9fb24037f35)
+on **Base Sepolia (84532)**; as of the last check the published page showed **20 USDC** of total
+assets, read live.
+
+**What the published site cannot do, stated here rather than left to be discovered:** `/history`
+needs the **index service**, which is a separate process, and a static host runs none. That page
+therefore says *this page has no route to the index service* and shows nothing — not an error, but
+not data either. The `Now` panels read the chain directly and are unaffected. Publishing a snapshot
+of the index output is the next step (see `docs/STATIC-EXPORT-MIGRATION.md`).
+
 | Route | What it is | Sources it reads | Touches a wallet |
 |---|---|---|---|
 | `/` | the landing page: what the vault is, and why there are two sources | the deployment record | no |
@@ -14,6 +28,29 @@ Four routes and one app: the header links them, and the landing page says which 
 question. The two read-only pages differ in a way that is the point of both — the console holds two
 sources side by side and never lets one stand in for the other, while the history has exactly one
 source and says so, which is why it leads with the index's own lag instead of burying it.
+
+## Running it two ways
+
+```bash
+npm ci
+npm run dev            # development: the index service is proxied same-origin, as designed
+npm run check          # tests, type check, and the single-source checker
+npm run check:browser  # the browser assertions (needs a real browser and running services)
+```
+
+```bash
+# the way the published site is built
+node scripts/build-runtime-config.mjs \
+  --record deployments/base-sepolia.json --rpc https://sepolia.base.org \
+  --index null --out public/api/config
+STATIC_EXPORT=1 NEXT_PUBLIC_BASE_PATH=/vault-console npm run build   # -> out/
+```
+
+`--index null` is the difference that matters: in development the config points the index client at
+`/` and Next rewrites `/api/*` to the running service, so the service keeps refusing cross-origin
+requests as it should. The published build has no proxy to offer, so the config says there is no
+route, and the panels say so instead of blaming a service they never contacted.
+
 
 ## The console at `/vault`
 
@@ -256,21 +293,30 @@ src/lib/wagmi.ts              the wallet config: chains, injected(), no connecto
 src/lib/vaultActions.ts       the pre-flight decisions, extracted so they are testable without
                               a wallet -- the same move chartGeometry.ts makes for the chart
 src/lib/txState.ts            the five-valued transaction state and the mapping into it
-src/lib/endpoints.ts          server uses absolute URLs, browser uses the same-origin rewrites
-src/lib/api.ts                typed client; classifies unreachable / refused / malformed-URL
+src/lib/endpoints.ts          where the upstream services are, for the build config; absolute URLs,
+                              because the browser gets its endpoint from api/config instead
+src/lib/api.ts                typed client; classifies unreachable / refused / malformed-URL / no-route
 src/lib/chain.ts              live reads through viem; the vault ABI lives here and only here
-src/lib/deployment.ts         reads the vault address from the deploy record, never a copy
+src/lib/runtimeConfig.ts      reads api/config -- the addresses, the RPC endpoint, and whether this
+                              page has a route to the index service at all
 src/lib/types.ts              every amount typed as a string
 test/                         203 tests across 8 files, incl. fixtures captured from the service
 tools/                        assert + capture + scenarios + static check (with --selftest) + runner
 docs/                         the F1-F5 evidence trail
 ```
 
-`next.config.ts` rewrites `/api/*` and `/rpc` to the two services so **browser** code stays
-same-origin. **Server** code uses absolute URLs, because a relative URL has no origin to
-resolve against in Node and `fetch('/api/status')` throws
-`TypeError: Failed to parse URL` — which is what made this page return HTTP 500 in its first
-version. `src/lib/endpoints.ts` holds that rule and the reason.
+`next.config.ts` has two modes. In **development** it rewrites `/api/*` and `/rpc` to the two
+services, so browser code stays same-origin and the index service keeps refusing cross-origin
+requests as it should. The **static export** omits the rewrites entirely — Next rejects an export
+that declares them, and a rewrite that cannot work is worse than an absent one — and adds the
+`basePath` a GitHub Pages project site needs.
+
+There *was* a server half: `src/lib/deployment.ts` read the record per request and the pages were
+server components, which is why absolute URLs mattered (a relative URL has no origin to resolve
+against in Node, and `fetch('/api/status')` throws `TypeError: Failed to parse URL` — the cause of
+this app's first HTTP 500). That module is deleted and the pages are client components: the
+addresses arrive from `api/config`, generated from the same deployment record. What that changed,
+what it invalidated, and what is still unproven is recorded in `docs/STATIC-EXPORT-MIGRATION.md`.
 
 ---
 
