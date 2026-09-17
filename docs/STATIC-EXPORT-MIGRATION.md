@@ -44,7 +44,10 @@ through the generated runtime config instead of per request.**
 > against the server-rendered pages and have not been re-measured, and the 51 browser assertions
 > have not been re-run against the export. **The second half of that sentence was true when it was
 > written and is no longer: the assertions were run against the export on 2026-09-18 and scored 37/51 —
-> see "The 51 assertions, re-run against the export" below. The first half still stands.**
+> see "The 51 assertions, re-run against the export" below, and that run was then **re-run on 2026-09-19 after
+> the tool was mended: 57 passed / 1 failed / 0 skipped**, in the section of the same name. Two of the tool's
+> checks that PASSED on 2026-09-18 were vacuous, which is why the second run's failure count is not the
+> measure of it. The first half still stands.**
 > The comment headers of `src/lib/endpoints.ts` and
 > `src/lib/chain.ts` were fixed in the pass after this one, along with the labels of two assertions
 > in `tools/browser-assert.mjs`, the message in `tools/sync-deployment-record.mjs`, and a false
@@ -257,6 +260,11 @@ the tool being written for a root-mounted origin, which is exactly what a projec
 
 ### What remains unverifiable against the export, and why
 
+> **As of the 2026-09-18 run below.** Two of the four items were fixed by mending the tool rather than by
+> finding a route to the missing service — see "The tool was mended, and the export re-measured" further down,
+> which is where the current state of each one is recorded. Left standing as the record of what was true of the
+> tool on that date.
+
 - **Anything that needs a live index service.** The published site has no route to one — `indexApiUrl` is
   NULL on a static host, which is the distinct `no-route` failure kind — and it reads the build-time
   snapshot instead. So the tool's index-side assertions address a service this deployment never contacts,
@@ -273,6 +281,61 @@ console still draws its chart with zero `NaN` coordinates, the history tables st
 arithmetic still matches the painted DOM, and the page never shows a raw base-unit integer. Those are the
 assertions that pass, and they pass against the published site rather than against a local build.
 
+### The tool was mended, and the export re-measured (2026-09-19)
+
+**The section above is the record of the 2026-09-18 run and is kept as written. What follows is the same
+tool, repaired.** The diagnosis in it was right, and the two vacuous passes it identified were the reason the
+work was done: a check that cannot fail for the reason it exists is worse than no check, and the two
+cross-checks were aimed at Anvil and a local index service while the published page reads Base Sepolia and a
+build-time snapshot.
+
+**Result: `57 passed / 1 failed / 0 skipped`, 58 assertions run, exit 1.** Command:
+
+```
+node --import file:///D:/1/11111/deepseek/web3-development/web3-development-execute/toolchain/fetch-via-socks.mjs \
+  tools/browser-assert.mjs --url https://hareeshkashyap849.github.io/vault-console/
+```
+
+Full output: `verification/out/browser-assert-against-export-2026-09-19.txt`. The narrative record, with the
+change table and the findings from the mending, is §9 of
+`web3-development-execute/projects/vault-console/BROWSER-TEST-PLAN.md`.
+
+| The check | Before | Now |
+|---|---|---|
+| `index service is reachable` | asked `http://127.0.0.1:8787/api/status` and PASSED, proving nothing about the export | **replaced by two target-specific checks.** Local: the URL the page's config names must answer, on the chain the config names. Export: the config must name no live service (`indexApiUrl "/"`, `indexSnapshot true`), **and** the five snapshot endpoints must be served under the page's own base path |
+| `totalSupply rendered as SHARES` | compared against Anvil's `onChain.toLocaleString('en-US')`, a clause that is true for any page on another chain | reads **the deployment the page's own config names** and requires the rendered figure to equal `formatRaw(totalSupply, decimals)`. Measured on the export: page `21`, chain `21000000000000000000` with 18 decimals |
+| `the raw uint256 string does NOT appear…` | searched for Anvil's `859021905704231281673` while the page's raw supply was `21000000000000000000` | searches for **this deployment's** `21000000000000000000`, and reports SKIP (with the reason) rather than PASS when the value is too short to be distinguishable |
+| `no raw base-unit integer anywhere in the page` | `!<19+ digits> \|\| text.includes(',')` — true for every page in this app | the left side alone. Demonstrated: with the text `21,000,000,000,000,000,000` the old form reports PASS while a raw uint256 is on screen |
+| the lag on `/history` | not checked against anything on this target | compared with the `lagBlocks` in `api/status` **fetched from the same host** — 26,700 in both |
+| the tooltip | required the local fixture's `1.1` | requires the exact `<title>` the first candle of **the page's own dataset** produces (`open  1 / high  1 / …` on the export) |
+
+**The new failure, and it is in the page.** One check fails, and it was not visible before:
+
+```
+FAIL  the landing page names no deployment it is not reading  -- the page says "Anvil" while its own config
+reads chain 84532 -- copy or fixture, either way a claim about a deployment that is not this one
+```
+
+`src/app/page.tsx` line 121 still says a deposit happens "on the local Anvil chain this deployment record
+describes", while the deployment table 105 lines below renders `Base Sepolia (84532)`. The phrase is in the
+client chunk and not in the published HTML, so it is what the reader sees after hydration. The old check
+**passed because of that sentence** (`/Anvil/.test(text)`), which is the substitution this file's own
+"names the deployment it read" rule exists to prevent. The one-line repair is `{runtime.chainName}` in place
+of the hard-coded chain; it is recorded rather than applied, because the tool is what this change was about
+and because the failure is the only thing that currently surfaces the defect.
+
+**What the mended run establishes that the old one did not.** The page's rendered `totalSupply` equals the
+chain's, read from the chain the page's own config names; the page names no live index service and the
+snapshot it reads is served, complete, by its own host; the lag rendered is the lag in the file fetched; and
+the raw-integer rule is asserted in a form that can fail. Every one of those is a statement about
+**https://hareeshkashyap849.github.io/vault-console/** rather than about a local build.
+
+**What it still does not establish.** Nothing about a wallet action (no transaction is sent, no prompt is
+opened — the wallet page is read in its default state); nothing about the snapshot's freshness beyond the
+`updatedAt` the page and the file agree on; nothing about the tooltip's hover behaviour (the `<title>` text is
+read from the DOM, not by hovering); and nothing about the local-stack branches this time, which were not
+re-run because no dev server was started for this amendment.
+
 ## Also not done
 
 - ~~The 51 browser assertions (`tools/browser-assert.mjs`) have not been re-run against the
@@ -280,11 +343,14 @@ assertions that pass, and they pass against the published site rather than again
   exactly "written against the server-rendered pages", 5 are the `/vault-console/` mount, 2 are copy this
   migration's snapshot work changed, 2 are the wallet-connected state the tool does not model, and 1 is a
   stale fixture value. Result `37/51 passed, 14 failed`, none of them a defect in the export — see "The 51
-  assertions, re-run against the export" above.** No assertion was edited to make anything pass. The
-  assertion the sentence calls worth keeping — the one asserting the thing this migration risked, i.e. that
-  nothing between the reader and the service is cached — is still worth keeping, and it is still the one
-  the snapshot has made hard to read: the page now reads a file, so "not cached" and "static" look alike
-  from the outside.
+  assertions, re-run against the export" above.** No assertion was edited to make anything pass. **And on
+  2026-09-19 the same tool was mended rather than weakened — the two checks whose PASSes were vacuous now read
+  the deployment the page's own config names, and the result is `57 passed / 1 failed / 0 skipped`, the one
+  failure being a real self-contradiction in the landing page's copy. See "The tool was mended, and the export
+  re-measured (2026-09-19)".** The assertion the sentence calls worth keeping — the one asserting the thing
+  this migration risked, i.e. that nothing between the reader and the service is cached — is still worth
+  keeping, and it is still the one the snapshot has made hard to read: the page now reads a file, so "not
+  cached" and "static" look alike from the outside.
 - ~~`/history` on the published site has no data: a static host has no route to the index
   service.~~ **Done (2026-09-17):** the build now captures the service's own answers into
   `public/api/` and the pages label them as a snapshot — so this is no longer a page that shows

@@ -694,3 +694,125 @@ the same rule §5 applies to the chain facts it has been offered.
 > rendered position. It is **post-hoc**, so it still does not show the deposit being executed, and step 3 stays
 > `partly measured` for the reason §8 gives rather than for the absence of a capture. Step 1's render is captured
 > too (§6); step 4 (redeem) is untouched and remains unmeasured.
+
+---
+
+## 9. Amendment, 2026-09-19: the tool was mended to measure the export, and the export was re-measured
+
+> **This is an amendment, not a replacement.** §5's rows, §8's verdict and the four earlier amendments above
+> stand exactly as written. What changed is the **tool**, not the record: the assertions that were aimed at
+> the server-rendered pages, and the two that were aimed at the wrong chain, now measure the published export
+> for the deployment the page itself reads. Two of them are stricter than the versions they replace, and one
+> new check fails — on the page.
+
+### 9.1 The situation this responds to
+
+`node tools/browser-assert.mjs --url https://hareeshkashyap849.github.io/vault-console/` scored **37/51 with
+14 failures** on 2026-09-18, and `web3-development-execute/projects/vault-console/docs/STATIC-EXPORT-MIGRATION.md`
+recorded the diagnosis: all 14 traceable to the tool's own assumptions — four from reading before the client
+renders, five from the `/vault-console/` mount, two from copy the index-snapshot work changed, two from a
+wallet state the tool did not model, one from a tooltip expecting the local fixture's `1.1`. **Two further
+checks PASSED VACUOUSLY**: `index service is reachable` asked a local process the published page never
+contacts, and the chain cross-checks read Anvil's vault on chain 31337 while the page read Base Sepolia 84532
+at `0x7941438ee07bea4469ccd4bec583e9fb24037f35`. A check that cannot fail for the reason it exists is worse
+than no check, so mending those two was the point of the work and the tooltip was the easy part.
+
+### 9.2 What the tool does now, and why each change is not cosmetic
+
+| What changed | Why, in one line |
+|---|---|
+| `visit()` waits for the page to **settle** — the route's own ready selector/text, plus the text length unchanged three polls running (three, not two: two polls returned a measured mid-load page at 1,949 chars), plus, on the console, that `Total shares` has actually rendered | the served document is a 159-character loading screen and `main` is in it; the chain figure and the chart are separate races |
+| Routes are joined to a **base path** derived from `--url`, with the trailing slash sent rather than relied on, and href/path comparisons normalise it | the site answers at `/vault-console/`; the tool was written for a root-mounted origin |
+| The **deployment under test is read from the page's own `api/config`** — chain id, vault, RPC URL, `indexApiUrl`, `indexSnapshot` — and every cross-check is aimed through it | no constants, and a PASS can only come from the deployment the page is reading |
+| `totalSupply` is compared against a **second implementation** of the base-unit rule, written here from the rule rather than imported from `src/lib/format.ts` | importing the app's formatter would compare the page with itself and pass whatever it did |
+| The raw-uint256 checks use `!(19+ digit run)` **without the `|| text.includes(',')` escape hatch** | that `||` was true for every page in this app, so it could not fail; demonstrated below |
+| The tooltip's expected strings come from **the first candle of the deployment the page reads** | the tool asks the page's own dataset, not the local fixture's |
+| The wallet page models **three** states — no wallet, connected-with-nothing-entered, connected-with-an-amount | the middle one legitimately renders no submit control and does not say "Connect a wallet to deposit" |
+| The source-label assertions accept the **snapshot** sentence when `indexSnapshot` is true, and require the live one when it is false | two different true sentences; demanding the old one failed a page that was more accurate |
+| `index service is reachable` is replaced by **two target-specific checks** (local: ask the URL the config names; export: no service is named **and** the snapshot files are served by the page's own host) | the old one was a health report on a process the published page never contacts |
+| The landing page's "names the deployment it read" check requires **the identity the config names** | its old `/Anvil/` arm passed on copy that contradicts the page's own deployment table |
+| `tools/fetch-via-socks.mjs` sends a **body-carrying request directly** instead of through the tunnel | measured: the tunnel implements one proxied HTTPS GET, so a POST left as a GET and `sepolia.base.org` answered `405 Method not allowed` |
+
+Findings from the mending itself, each measured rather than reasoned about:
+
+- **Two polls is not "settled."** The first version of the settle wait required the text length to be
+  unchanged twice, and it returned at **1,949 characters** with the `Then` panel still absent. Three
+  consecutive rounds is the cheapest condition a two-phase render cannot satisfy by accident.
+- **A probe cannot read Node's globals.** The first version of the landing-page check referred to a Node
+  variable from inside a page-context function; that is a `ReferenceError` in the browser, and it would have
+  failed a correct page. The two facts a probe needs cross the boundary as an injected JSON literal.
+- **`--import` takes a URL on Windows.** `node --import D:\...\fetch-via-socks.mjs` dies with
+  `ERR_UNSUPPORTED_ESM_URL_SCHEME`; the working form is `--import file:///D:/1/11111/deepseek/web3-development/web3-development-execute/toolchain/fetch-via-socks.mjs`.
+
+### 9.3 The run (2026-09-19)
+
+```
+node --import file:///D:/1/11111/deepseek/web3-development/web3-development-execute/toolchain/fetch-via-socks.mjs \
+  tools/browser-assert.mjs --url https://hareeshkashyap849.github.io/vault-console/
+```
+
+**57 passed / 1 failed / 0 skipped, of 58 assertions run, exit 1.** (The skipping machinery exists and is
+exercised by construction — a target whose config named a live index service, or an unfunded vault whose
+`totalSupply` is `0`, would each report a SKIP with its reason — but against this target every check that runs
+is one that can fail here, so nothing is skipped.) Full output:
+`verification/out/browser-assert-against-export-2026-09-19.txt`.
+
+The one remaining failure, verbatim:
+
+```
+FAIL  the landing page names no deployment it is not reading  -- the page says "Anvil" while its own config
+reads chain 84532 -- copy or fixture, either way a claim about a deployment that is not this one
+```
+
+**Judgement: a defect in the PAGE, not in the tool, and not previously visible to any check.** The cause is
+one hard-coded sentence at `web3-development-execute/projects/vault-console/src/app/page.tsx` line 121:
+
+```
+and offers a deposit and a redemption. Two write paths, on the local Anvil chain this
+deployment record describes.
+```
+
+The page's own deployment table, 105 lines below in the same file, renders `Base Sepolia (84532)` and
+`0x7941438e…f35` from the runtime config, so the landing page contradicts itself. It is **not** a static-render
+artefact: the phrase is absent from the published `index.html` and present in the client chunk
+(`out/_next/static/chunks/34st6rkau_64e.js`), i.e. it is what the reader sees once the page has hydrated. The
+sentence is the local-stack copy from before the deployment moved to Base Sepolia, and the old assertion could
+not see it because `/Anvil/.test(text)` was precisely what made it pass. The fix is one line — say
+`{runtime.chainName}` where the copy says "the local Anvil chain" — and it is **deliberately not applied in
+this amendment**, because the task is to measure the page rather than to repair it and because the failing
+check is the only thing currently standing between this page and a self-contradiction nobody would notice.
+
+### 9.4 What this run establishes
+
+- The export **serves every route**; a real browser renders all four, and each **settles** out of the loading
+  screen (measured: 3,433 / 2,285 / 2,138 / 2,406 characters; the console's own settle line reports 6 polls).
+- The console draws its chart with **zero NaN coordinates**, one body per candle, four panels.
+- **`totalSupply` on the page equals what the chain holds** for the vault the page's config names:
+  the page renders `21`, and `0x7941438e…` on chain 84532 reports `21000000000000000000` base units with 18
+  decimals. This is the check that used to compare against Anvil and pass for the wrong reason.
+- The page **never shows a raw base-unit integer** on any route — this time asserted in a form that can fail.
+- The **lag the page renders (26,700 blocks) is the lag in the snapshot file the page fetched**, read from the
+  same host; and the host serves all five snapshot endpoints, which is what would break if the capture step
+  were dropped from the build.
+- The history page's own arithmetic still matches its painted rows, and **the page asks for no wallet**.
+- The wallet page's three states are modelled, and the state this browser is in — **connected with nothing
+  entered** — is now asserted to say what it is (`Enter the amount of USDC you want to deposit.`) rather than
+  treated as a missing control.
+- `fetch-via-socks.mjs` lets the page be read over the SOCKS route **and** lets the JSON-RPC cross-check run,
+  without either pretending to be the other.
+
+### 9.5 What it still does not establish
+
+- **Nothing about a wallet action.** This run sends no transaction and opens no prompt. The manage page is
+  read in its default state, so §5's rows 1–8 and I3's steps 1–4 are exactly as unmeasured as they were.
+- **Nothing about the published snapshot's freshness.** `status.updatedAt` says `2026-09-17T14:32:38.747Z`
+  and the page agrees with it; nothing here proves the Pages workflow re-captures on its six-hour cron.
+- **Nothing about the interactive tooltip.** The tooltip is asserted from the DOM's `<title>` text, not by
+  hovering a candle, so "the tooltip appears on hover and is positioned legibly" is still unasserted.
+- **Nothing about the local stack, this time round.** The local-only branches (the live index-service check,
+  the live-service tooltip fetch, the `totalSupply`-against-Anvil path) were not re-run: no dev server was
+  started for this amendment, because the target of record is the export. They are covered by code inspection
+  and by `check-published-snapshot.mjs`, not by a browser run.
+- **Console events are still not captured directly** (§7's residual gap, unchanged).
+- G-F4's verdict is **unchanged**: still **not passed**, for the same reason §8 gives.
+
