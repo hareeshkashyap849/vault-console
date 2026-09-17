@@ -1,0 +1,87 @@
+# Publish the console to GitHub Pages as a static export.
+#
+# WHY THIS IS POSSIBLE AT ALL
+#
+# The console needs no server: the addresses come from the deployment record at build time
+# (`scripts/build-runtime-config.mjs`), the chain is read by the browser, and every page is a
+# client component. What a server used to supply -- a per-request record read, a same-origin proxy
+# to the index service -- is either generated into the artifact or honestly reported as absent.
+#
+# THE INDEX SERVICE IS THE ONE THING THAT CANNOT COME ALONG
+#
+# `--index null` is deliberate. A static host runs no process, so there is no route to the index,
+# and the panels say exactly that. Pointing `indexApiUrl` at a hosted service instead would work
+# the day such a service exists; until then, saying "this page has no route" is true and
+# "the index service is not reachable" would blame a service the page never asked.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # The same checks `npm run check` runs: the arithmetic, then the type check, then the
+      # single-source checker. They run BEFORE the build, so a broken commit does not replace a
+      # working published site.
+      - name: Unit tests and the single-source checker
+        run: npm test && node tools/check-single-source.mjs
+
+      # `next build` runs the type check on a real runner, so nothing is skipped here. (Locally it
+      # needs `NEXT_SKIP_TYPECHECK=1` because this workspace's sandbox forbids the pipes Next uses
+      # to capture the checker's output -- see next.config.ts.)
+      - name: Generate the runtime config from the committed deployment record
+        run: |
+          node scripts/build-runtime-config.mjs \
+            --record deployments/base-sepolia.json \
+            --rpc https://sepolia.base.org \
+            --index null \
+            --out public/api/config
+
+      - name: Build the static export
+        env:
+          STATIC_EXPORT: '1'
+          # A project site is served from /<repo>/, so every asset URL and every client fetch has
+          # to carry this prefix. Next rewrites <Link> and the router for it; the config loader
+          # reads it from the environment Next inlines.
+          NEXT_PUBLIC_BASE_PATH: /vault-console
+        run: npm run build
+
+      - name: Show what will be published
+        run: find out -maxdepth 2 -type f | sort | head -40
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
