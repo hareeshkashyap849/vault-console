@@ -238,6 +238,32 @@ jobs:
       # rewriting -- the way GitHub Pages serves it -- and then fetches the five snapshot paths plus
       # `/api/config` over HTTP, WITH the query strings the console sends.
       #
+      # THE SERVER COMES FROM THE RUNNER, AND THAT IS THE FIX RATHER THAN A DETAIL
+      #
+      # This step used to run `node "$GITHUB_WORKSPACE/toolchain/serve-static.mjs"`. `toolchain/` is
+      # a directory of the WORKSPACE this project is developed in, not of this repository -- so on a
+      # runner, where `$GITHUB_WORKSPACE` is this checkout, the module does not exist. The server
+      # never listened and the step failed with `Cannot find module
+      # '.../vault-console/toolchain/serve-static.mjs'` (run 35241684833, head `639dcfc`). That
+      # failure is BEFORE the artifact upload, which is why it broke the build without taking the
+      # published site down with it.
+      #
+      # `python3 -m http.server` is on every `ubuntu-latest` image, and its handler maps a URL path
+      # to a file path literally: it neither requires nor invents a file extension, which is the
+      # whole mechanism the five snapshot files depend on. Committing a server into `tools/` was the
+      # other option and is not needed -- the four properties this step needs were each measured
+      # against the runner's server before it was adopted:
+      #
+      #   serves `out` at the root        `--directory`, no rewriting and no fallbacks
+      #   extensionless file at its path  `/api/config` -> `out/api/config`: 200, 865 bytes
+      #   query string ignored            `/api/candles?bucket=60&limit=5000`: 200, 28 candles
+      #   a missing path is a 404         `/api/not-captured`: 404, which is the control the check
+      #                                   needs to mean anything
+      #
+      # One honest difference from the server this replaced: both send
+      # `application/octet-stream` for a file with no extension, and nothing reads that header --
+      # the check parses the body with `JSON.parse`, and so does the console in the browser.
+      #
       # `tools/check-published-snapshot.mjs` validates each body with `checkBody` FROM THE CAPTURE
       # SCRIPT, so there is no second definition of "a valid snapshot", and it asserts the one fact
       # no other check covers: that the served `/api/config` says `indexSnapshot: true`. Without
@@ -250,7 +276,11 @@ jobs:
           NEXT_PUBLIC_BASE_PATH: /vault-console
         run: |
           set -euo pipefail
-          node "$GITHUB_WORKSPACE/toolchain/serve-static.mjs" out 8123 > "$RUNNER_TEMP/static.log" 2>&1 &
+          # `--bind 127.0.0.1`, so the export the check is about to read is not also published to
+          # the runner's network for the few seconds this takes.
+          python3 -m http.server 8123 \
+            --bind 127.0.0.1 \
+            --directory "$GITHUB_WORKSPACE/out" > "$RUNNER_TEMP/static.log" 2>&1 &
           serve_pid=$!
           trap 'kill "$serve_pid" 2>/dev/null || true' EXIT
 
@@ -264,7 +294,7 @@ jobs:
             sleep 1
           done
 
-          node tools/check-published-snapshot.mjs --base http://127.0.0.1:8123
+          node "$GITHUB_WORKSPACE/tools/check-published-snapshot.mjs" --base http://127.0.0.1:8123
 
           echo "--- what the static server was asked for ---"
           cat "$RUNNER_TEMP/static.log"
