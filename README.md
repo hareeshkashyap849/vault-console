@@ -168,7 +168,7 @@ where the deployment record is read from.
 ### Checks
 
 ```powershell
-npm test                              # 203 tests, 8 files
+npm test                              # 259 tests, 10 files
 npm run typecheck                     # tsc --noEmit, must be exit 0
 npm run check                         # tests + typecheck + single-source static check
 node tools/check-single-source.mjs    # no second implementation of amount arithmetic
@@ -323,7 +323,7 @@ src/lib/runtimeConfig.ts      reads api/config -- the addresses, the RPC endpoin
                               has a route to the index service, and whether the index answers it
                               reads are a SNAPSHOT rather than a live service
 src/lib/types.ts              every amount typed as a string
-test/                         243 tests across 10 files, incl. fixtures captured from the service
+test/                         259 tests across 10 files, incl. fixtures captured from the service
 tools/                        assert + capture + scenarios + static checks (one with --selftest) +
                               the runner + check-published-snapshot (verifies a SERVED export)
 docs/                         the F1-F5 evidence trail

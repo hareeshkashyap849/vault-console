@@ -1,45 +1,130 @@
+# vault-console test run -- captured 2026-09-18 (local clock, +08:00).
+#
+# Command:  node tools/run-tests.mjs        (this is what `npm test` runs)
+# Result:   259 tests across 10 files, 10/10 files passed, exit 0.
+#
+# The runner excludes the two files that need live services, and names them on its first line
+# below; they are run explicitly instead (node --experimental-strip-types
+# test/contract-live.test.ts, and node tools/browser-assert.mjs).
+#
+# Everything below this header is the runner's own output, unedited. The counts move as tests
+# are added, so if README.md's count and this file disagree, this file is the stale one:
+# re-run the command above and re-capture.
+
 Not run here (need live services, run explicitly): api-against-real-service.test.ts, contract-live.test.ts
 
 ========================================================================
 api.test.ts
 ========================================================================
 ▶ endpoints
-  ✔ defaults to the ports the services actually use (0.4377ms)
-  ✔ honours the environment override and strips a trailing slash (0.1698ms)
-  ✔ always produces an absolute URL on the server (0.2417ms)
-✔ endpoints (1.3587ms)
+  ✔ defaults to the ports the services actually use (0.4241ms)
+  ✔ honours the environment override and strips a trailing slash (0.1513ms)
+  ✔ always produces an absolute URL on the server (0.2112ms)
+✔ endpoints (1.2752ms)
 ▶ indexApi -- request construction
-  ✔ requests an ABSOLUTE url, which is the fix for the server-side 500 (11.175ms)
-  ✔ builds the query strings the service documents (1.3064ms)
-  ✔ defaults the event limit and omits an absent kind (0.3417ms)
-  ✔ sends no-store, because a cached console shows stale figures as current (0.2214ms)
-✔ indexApi -- request construction (13.2113ms)
+  ✔ requests a same-origin path when the config says the service is same-origin (11.1027ms)
+  ✔ uses an absolute URL when the config gives one (1.0077ms)
+  ✔ refuses, without asking, when the config says there is no route (0.2853ms)
+  ✔ builds the query strings the service documents (0.6895ms)
+  ✔ defaults the event limit and omits an absent kind (0.2299ms)
+  ✔ sends no-store, because a cached console shows stale figures as current (0.2164ms)
+✔ indexApi -- request construction (13.7514ms)
 ▶ indexApi -- failure classification
-  ✔ names an unbuilt request URL as a console bug, not a service that is down (0.2925ms)
-  ✔ names a transport failure as unreachable, and says how to start the service (0.1714ms)
-  ✔ surfaces the service's own refusal verbatim rather than rewriting it (0.2792ms)
-  ✔ describes a non-JSON error body as a proxy answering, which is what it is (0.4761ms)
-  ✔ catches a 200 that is not JSON -- a rewritten page, not data (0.4695ms)
-  ✔ marks a 400 as not retryable and a 500 as retryable (0.1161ms)
-  ✔ does not retry: exactly one request per call, however it fails (0.148ms)
-✔ indexApi -- failure classification (2.1055ms)
-ℹ tests 14
+  ✔ names an unbuilt request URL as a console bug, not a service that is down (0.2163ms)
+  ✔ names a transport failure as unreachable, and says how to start the service (0.1402ms)
+  ✔ surfaces the service's own refusal verbatim rather than rewriting it (0.2556ms)
+  ✔ describes a non-JSON error body as a proxy answering, which is what it is (0.304ms)
+  ✔ catches a 200 that is not JSON -- a rewritten page, not data (0.1644ms)
+  ✔ marks a 400 as not retryable and a 500 as retryable (0.1023ms)
+  ✔ does not retry: exactly one request per call, however it fails (0.0905ms)
+✔ indexApi -- failure classification (1.4111ms)
+ℹ tests 16
 ℹ suites 3
-ℹ pass 14
+ℹ pass 16
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 21.4035
+ℹ duration_ms 21.0859
+
+========================================================================
+capture-index-snapshot.test.ts
+========================================================================
+▶ checkBody accepts the bodies the running service actually produces
+  ✔ accepts all five committed fixtures -- the service output, not a sample (2.869ms)
+  ✔ accepts the one candle shape this checker must not be stricter than: the service groups thousands (0.7704ms)
+  ✔ accepts an empty index -- no series, no events, empty tally (0.3898ms)
+✔ checkBody accepts the bodies the running service actually produces (4.6424ms)
+▶ checkBody refuses a partial or malformed body
+  ✔ refuses a missing status field, and names it (0.3327ms)
+  ✔ refuses a status whose age cannot be stated, even though the page would render it (0.3343ms)
+  ✔ refuses a missing coverage note rather than letting it print as "undefined" (0.5547ms)
+  ✔ refuses a missing decimals pair, because null decimals un-format every amount (0.1778ms)
+  ✔ refuses an event row with no transaction hash (0.19ms)
+  ✔ distinguishes an absent nullable field from an explicit null (0.1991ms)
+  ✔ refuses an amount that arrived as a JSON number (0.1861ms)
+  ✔ refuses a filter envelope that is present but empty (0.1467ms)
+  ✔ refuses a candles body with no candle array, and names it (0.439ms)
+  ✔ refuses a candle missing one of the nine fields the chart reads, and names the row (3.3225ms)
+  ✔ refuses a candle value that arrived as a JSON number or a broken decimal (1.5727ms)
+  ✔ refuses a candles envelope whose own numbers disagree with its array (0.791ms)
+  ✔ refuses a candles body whose series is not oldest first (0.4869ms)
+  ✔ refuses a body that is not an object at all (0.0733ms)
+✔ checkBody refuses a partial or malformed body (9.1293ms)
+▶ withSnapshotNote
+  ✔ appends one sentence to status.note and leaves everything else alone (0.2555ms)
+  ✔ does NOT rewrite staleSeconds or updatedAt (0.1168ms)
+  ✔ leaves the other four bodies untouched (0.2998ms)
+✔ withSnapshotNote (0.7446ms)
+▶ the capture itself
+  ✔ captures all five bodies verbatim when the service answers properly (29.1276ms)
+  ✔ reports the candle count, so a build log says the chart has something to draw (10.7487ms)
+  ✔ REFUSES a body that is not JSON -- and writes nothing (6.4933ms)
+  ✔ REFUSES when one body is complete and another is partial (7.1569ms)
+  ✔ REFUSES a partial candles body -- the endpoint that was missing for a while (5.6995ms)
+  ✔ REFUSES a candles body that is not JSON, like every other endpoint (4.3562ms)
+  ✔ reports every failed endpoint at once, not just the first (4.6481ms)
+  ✔ throws with the URL in the message when the service is not answering (0.3382ms)
+  ✔ refuses a non-200 rather than writing the error body (2.3794ms)
+capturing from http://127.0.0.1:59388
+writing to     C:\Users\admin\AppData\Local\Temp\dsh-kn7X11\vault-console-capture-v5zU4i
+
+REFUSED: 1 of 5 endpoint(s) could not be captured; nothing was written:
+
+http://127.0.0.1:59388/api/price?limit=25 did not answer with JSON: Unexpected token 'o', "not json" is not valid JSON. First 200 bytes: not json
+
+Nothing was written. A partial snapshot is worse than none: a missing field renders as a dash or an empty table, which reads like a working page with no data.
+capturing from http://127.0.0.1:59391
+writing to     C:\Users\admin\AppData\Local\Temp\dsh-kn7X11\vault-console-capture-v5zU4i
+
+OK   status   /api/status                          1215 bytes
+OK   summary  /api/summary                          565 bytes
+OK   events   /api/events?limit=50                  553 bytes
+OK   price    /api/price?limit=25                  1467 bytes
+OK   candles  /api/candles?bucket=60&limit=5000   39438 bytes  169 candles over 5000 blocks
+
+5/5 captured into C:\Users\admin\AppData\Local\Temp\dsh-kn7X11\vault-console-capture-v5zU4i
+Every body parsed as JSON and carried every field the pages read.
+status.note has one sentence appended: "These figures are a snapshot of the index service, taken whe..."
+  ✔ the CLI leaves the output directory EMPTY when it refuses (11.5642ms)
+✔ the capture itself (83.0312ms)
+ℹ tests 30
+ℹ suites 4
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 101.0105
 
 ========================================================================
 chain-errors.test.ts
 ========================================================================
 ▶ chain read failures become sentences, not dumps
-  ✔ a dead endpoint produces a ChainError naming the endpoint (1130.8774ms)
-  ✔ names the transport error as the root cause, which is the actionable part (1108.8288ms)
-  ✔ the endpoint quoted is the one actually used, not a default (1119.4021ms)
-✔ chain read failures become sentences, not dumps (3360.0564ms)
+  ✔ a dead endpoint produces a ChainError naming the endpoint (1150.4027ms)
+  ✔ names the transport error as the root cause, which is the actionable part (1134.8065ms)
+  ✔ the endpoint quoted is the one actually used, not a default (1121.9237ms)
+✔ chain read failures become sentences, not dumps (3408.0349ms)
 ℹ tests 3
 ℹ suites 1
 ℹ pass 3
@@ -47,163 +132,178 @@ chain-errors.test.ts
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 3362.2971
+ℹ duration_ms 3410.3174
 
 ========================================================================
 chart-geometry.test.ts
 ========================================================================
 ▶ computeRange -- the zero-range guard
-  ✔ expands a flat range instead of dividing by zero (0.9948ms)
-  ✔ every y coordinate is finite for a flat series -- the assertion the bug would fail (0.0976ms)
-  ✔ keeps a zero price drawable (0.0861ms)
-  ✔ pads a range that has movement, without making it flat (0.0753ms)
-  ✔ distinguishes flat from padded -- a one-base-unit move is not flat (0.0567ms)
-  ✔ returns null when there is nothing finite to scale (0.044ms)
-  ✔ ignores non-finite values when finite ones exist (0.0505ms)
-  ✔ handles a negative range (a price cannot be negative, but the guard must not assume it) (0.0507ms)
-✔ computeRange -- the zero-range guard (2.0018ms)
+  ✔ expands a flat range instead of dividing by zero (0.407ms)
+  ✔ every y coordinate is finite for a flat series -- the assertion the bug would fail (0.0933ms)
+  ✔ keeps a zero price drawable (0.055ms)
+  ✔ pads a range that has movement, without making it flat (0.0674ms)
+  ✔ distinguishes flat from padded -- a one-base-unit move is not flat (0.0563ms)
+  ✔ returns null when there is nothing finite to scale (0.0456ms)
+  ✔ ignores non-finite values when finite ones exist (0.0534ms)
+  ✔ handles a negative range (a price cannot be negative, but the guard must not assume it) (0.0587ms)
+✔ computeRange -- the zero-range guard (1.4346ms)
 ▶ rangeFor
-  ✔ scales over all four values of every candle, not just the closes (0.1201ms)
-  ✔ returns null for an empty series so the component renders its empty state (0.0741ms)
-  ✔ reads the exact decimal strings, which for this vault are all "1.1" (0.1803ms)
-✔ rangeFor (0.4693ms)
+  ✔ scales over all four values of every candle, not just the closes (0.1467ms)
+  ✔ returns null for an empty series so the component renders its empty state (0.0933ms)
+  ✔ reads the exact decimal strings, which for this vault are all "1.1" (0.5375ms)
+✔ rangeFor (0.883ms)
+▶ rangeFor -- the OHLC values arrive with thousands separators
+  ✔ asserts the premise: `Number` really cannot read a grouped value (0.1224ms)
+  ✔ produces a real range for a grouped value, where the old parse produced null (0.0692ms)
+  ✔ reads a grouped value as the number it is written as (0.391ms)
+  ✔ scales a grouped series over its true values, not over four NaNs (0.0568ms)
+  ✔ still expands a grouped series that never moved -- the four-digit flat case (0.4128ms)
+  ✔ hands `candleGeometry` finite coordinates for a grouped candle (0.1121ms)
+  ✔ drops a value no parser can read rather than taking the panel down (0.4651ms)
+✔ rangeFor -- the OHLC values arrive with thousands separators (1.7311ms)
 ▶ makeScale
-  ✔ maps the range maximum to the top of the band and the minimum to the bottom (0.1221ms)
-  ✔ is monotonic: a higher price is never drawn lower (0.0552ms)
-✔ makeScale (0.2287ms)
+  ✔ maps the range maximum to the top of the band and the minimum to the bottom (0.0574ms)
+  ✔ is monotonic: a higher price is never drawn lower (0.0491ms)
+✔ makeScale (0.1449ms)
 ▶ candleGeometry -- the doji floor
-  ✔ gives a zero-height body (a doji) a visible minimum (0.1392ms)
-  ✔ uses the true height when the candle did move (0.0461ms)
-  ✔ marks up and down from open vs close, not high vs low (0.0362ms)
-  ✔ treats close === open as up, so a flat series is one colour rather than alternating (0.027ms)
-  ✔ places the body top at the lesser of open and close (0.0294ms)
-  ✔ produces a finite geometry for every candle in the real flat series (0.4569ms)
-✔ candleGeometry -- the doji floor (0.8186ms)
+  ✔ gives a zero-height body (a doji) a visible minimum (0.0636ms)
+  ✔ uses the true height when the candle did move (0.0898ms)
+  ✔ marks up and down from open vs close, not high vs low (0.04ms)
+  ✔ treats close === open as up, so a flat series is one colour rather than alternating (0.2254ms)
+  ✔ places the body top at the lesser of open and close (0.0445ms)
+  ✔ produces a finite geometry for every candle in the real flat series (1.1631ms)
+✔ candleGeometry -- the doji floor (1.9358ms)
 ▶ horizontalLayout
-  ✔ keeps a single candle from being drawn as a wall (0.0719ms)
-  ✔ keeps five thousand candles from rounding away to nothing (0.0361ms)
-  ✔ centres candle i in its own slot (0.0336ms)
-  ✔ never produces a zero or negative width for any realistic count (0.0475ms)
-✔ horizontalLayout (0.2461ms)
-ℹ tests 23
-ℹ suites 5
-ℹ pass 23
+  ✔ keeps a single candle from being drawn as a wall (0.0991ms)
+  ✔ keeps five thousand candles from rounding away to nothing (0.0413ms)
+  ✔ centres candle i in its own slot (0.0488ms)
+  ✔ never produces a zero or negative width for any realistic count (0.056ms)
+✔ horizontalLayout (0.2999ms)
+ℹ tests 30
+ℹ suites 6
+ℹ pass 30
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 8.4619
+ℹ duration_ms 12.0115
 
 ========================================================================
 contract.test.ts
 ========================================================================
 ▶ fixture: /api/status
-  ✔ has exactly the fields the console reads, and no others (0.6212ms)
-  ✔ types each field the way `Status` declares it (0.1084ms)
-  ✔ carries a coverage object whose note is printed verbatim on the page (0.087ms)
-  ✔ reports the gap honestly: the series starts later than the deployment (0.1178ms)
-✔ fixture: /api/status (1.4098ms)
+  ✔ has exactly the fields the console reads, and no others (0.6344ms)
+  ✔ types each field the way `Status` declares it (0.1237ms)
+  ✔ carries a coverage object whose note is printed verbatim on the page (0.0824ms)
+  ✔ reports the gap honestly: the series starts later than the deployment (0.1054ms)
+✔ fixture: /api/status (1.4521ms)
 ▶ fixture: /api/price
-  ✔ has exactly the declared fields (0.0924ms)
-  ✔ keeps every amount a STRING, including the one that overflows a double (0.0939ms)
-  ✔ documents that price is derived on read, not stored (0.051ms)
-✔ fixture: /api/price (0.341ms)
+  ✔ has exactly the declared fields (0.0812ms)
+  ✔ keeps every amount a STRING, including the one that overflows a double (0.0876ms)
+  ✔ documents that price is derived on read, not stored (0.0612ms)
+✔ fixture: /api/price (0.3271ms)
 ▶ fixture: /api/candles
-  ✔ has exactly the declared fields (0.0997ms)
-  ✔ gives every candle eight fields, all of the declared type (0.7564ms)
-  ✔ keeps OHLC ordered: low <= open,close <= high (0.6024ms)
-  ✔ every candle in the captured window is flat at 1.1 -- the reason the chart guard exists (0.1167ms)
-  ✔ explains that `limit` is blocks pulled, not candles returned (0.0566ms)
-✔ fixture: /api/candles (1.7774ms)
+  ✔ has exactly the declared fields (0.1165ms)
+  ✔ gives every candle eight fields, all of the declared type (0.8176ms)
+  ✔ keeps OHLC ordered: low <= open,close <= high (0.6348ms)
+  ✔ every candle in the captured window is flat at 1.1 -- the reason the chart guard exists (0.4685ms)
+  ✔ explains that `limit` is blocks pulled, not candles returned (0.0594ms)
+✔ fixture: /api/candles (2.2813ms)
 ▶ fixture: /api/summary
-  ✔ has exactly the declared fields -- the ones this console originally got wrong (0.5382ms)
-  ✔ keys event kinds by name, each with a count and an exact asset sum (0.1371ms)
-  ✔ totals the counts to totalEvents (0.0512ms)
-  ✔ reconciles to the vault's total assets -- gross in, minus gross out, plus reported yield (0.2029ms)
-  ✔ the naive per-kind sum does NOT equal totalAssets, and the difference is the trap (0.0658ms)
-  ✔ has no unknown kinds, so the decoder covers every log the vault emits (0.0321ms)
-✔ fixture: /api/summary (1.1308ms)
+  ✔ has exactly the declared fields -- the ones this console originally got wrong (0.0789ms)
+  ✔ keys event kinds by name, each with a count and an exact asset sum (0.1006ms)
+  ✔ totals the counts to totalEvents (0.0418ms)
+  ✔ reconciles to the vault's total assets -- gross in, minus gross out, plus reported yield (0.1756ms)
+  ✔ the naive per-kind sum does NOT equal totalAssets, and the difference is the trap (0.0481ms)
+  ✔ has no unknown kinds, so the decoder covers every log the vault emits (0.0345ms)
+✔ fixture: /api/summary (0.5713ms)
+▶ fixture: /api/events
+  ✔ has exactly the envelope `EventResponse` declares -- including `filter` (0.0448ms)
+  ✔ spells "not filtered" as null rather than by omitting the key (0.025ms)
+  ✔ gives every event row the nine fields `VaultEvent` declares (0.1129ms)
+  ✔ reports a count that matches the rows it actually sent (0.0355ms)
+✔ fixture: /api/events (0.2677ms)
 ▶ cross-fixture consistency
-  ✔ the same vault and chain appear in every fixture that names them (0.1314ms)
-  ✔ the asset decimals agree across every fixture (0.2655ms)
-  ✔ the summary flow identity equals the price series' last totalAssets (0.1865ms)
-✔ cross-fixture consistency (0.6389ms)
-ℹ tests 21
-ℹ suites 5
-ℹ pass 21
+  ✔ the same vault and chain appear in every fixture that names them (0.1254ms)
+  ✔ the asset decimals agree across every fixture (0.2383ms)
+  ✔ the summary flow identity equals the price series' last totalAssets (0.158ms)
+✔ cross-fixture consistency (0.5743ms)
+ℹ tests 25
+ℹ suites 6
+ℹ pass 25
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 10.3892
+ℹ duration_ms 11.0517
 
 ========================================================================
 format.test.ts
 ========================================================================
 ▶ parseAmount -- decimal string to base units
-  ✔ reads a decimal string as exact base units (0.4754ms)
-  ✔ handles a fraction shorter than the asset has decimals (0.0675ms)
-  ✔ treats a trailing dot as a whole number (0.0506ms)
-  ✔ carries the sign (0.0475ms)
-  ✔ REFUSES more fraction digits than the asset has, rather than truncating (0.4306ms)
-  ✔ rejects anything that is not a plain decimal (0.1531ms)
+  ✔ reads a decimal string as exact base units (0.4569ms)
+  ✔ handles a fraction shorter than the asset has decimals (0.0673ms)
+  ✔ treats a trailing dot as a whole number (0.0509ms)
+  ✔ carries the sign (0.0466ms)
+  ✔ REFUSES more fraction digits than the asset has, rather than truncating (0.2181ms)
+  ✔ rejects anything that is not a plain decimal (0.114ms)
   ✔ accepts surrounding whitespace rather than making every caller trim (0.0727ms)
-  ✔ rejects a decimals count that is not a non-negative integer (0.1419ms)
-✔ parseAmount -- decimal string to base units (2.016ms)
+  ✔ rejects a decimals count that is not a non-negative integer (0.1398ms)
+✔ parseAmount -- decimal string to base units (1.7385ms)
 ▶ formatBigInt / formatBaseUnits -- RAW BASE UNITS to a decimal string
-  ✔ converts the vault's real share supply, which no double can hold (0.2486ms)
-  ✔ trims trailing zeros so one number prints one way (0.1473ms)
-  ✔ pads a fraction correctly at 18 decimals (0.0605ms)
-  ✔ keeps the sign (0.038ms)
-  ✔ handles a magnitude AND a nonzero tail, the worst case for a double (0.0264ms)
-  ✔ accepts a bigint as well as a string, without changing the answer (0.1149ms)
-  ✔ REFUSES a decimal string -- that input means the caller grabbed the wrong formatter (0.2068ms)
-  ✔ rejects a decimals count that is not a non-negative integer (0.0535ms)
-✔ formatBigInt / formatBaseUnits -- RAW BASE UNITS to a decimal string (1.123ms)
+  ✔ converts the vault's real share supply, which no double can hold (0.2123ms)
+  ✔ trims trailing zeros so one number prints one way (0.1267ms)
+  ✔ pads a fraction correctly at 18 decimals (0.047ms)
+  ✔ keeps the sign (0.035ms)
+  ✔ handles a magnitude AND a nonzero tail, the worst case for a double (0.0288ms)
+  ✔ accepts a bigint as well as a string, without changing the answer (0.0455ms)
+  ✔ REFUSES a decimal string -- that input means the caller grabbed the wrong formatter (0.0633ms)
+  ✔ rejects a decimals count that is not a non-negative integer (0.0403ms)
+✔ formatBigInt / formatBaseUnits -- RAW BASE UNITS to a decimal string (0.7407ms)
 ▶ formatDecimal -- an ALREADY-formatted decimal string
-  ✔ passes a price through unchanged (0.1447ms)
-  ✔ normalises trailing zeros so one candle's four values print alike (0.0383ms)
-  ✔ tolerates surrounding whitespace (0.0266ms)
-  ✔ passes a whole-number price through, because "2" is a legal price (0.0225ms)
-  ✔ rejects anything that is not a decimal (0.0945ms)
-  ✔ THE PAIR IS ASYMMETRIC ON PURPOSE, and the asymmetry is the protection (0.0498ms)
-✔ formatDecimal -- an ALREADY-formatted decimal string (0.4462ms)
+  ✔ passes a price through unchanged (0.1244ms)
+  ✔ normalises trailing zeros so one candle's four values print alike (0.037ms)
+  ✔ tolerates surrounding whitespace (0.0222ms)
+  ✔ passes a whole-number price through, because "2" is a legal price (0.0247ms)
+  ✔ rejects anything that is not a decimal (0.1162ms)
+  ✔ THE PAIR IS ASYMMETRIC ON PURPOSE, and the asymmetry is the protection (0.0469ms)
+✔ formatDecimal -- an ALREADY-formatted decimal string (0.4404ms)
 ▶ groupThousands
-  ✔ groups the integer part only (0.1048ms)
-  ✔ leaves short numbers and negatives alone (0.0368ms)
-  ✔ does not group the fraction (0.0237ms)
-✔ groupThousands (0.2071ms)
+  ✔ groups the integer part only (0.1111ms)
+  ✔ leaves short numbers and negatives alone (0.0397ms)
+  ✔ does not group the fraction (0.0246ms)
+✔ groupThousands (0.2199ms)
 ▶ displayBaseUnits -- the chain's raw amounts, ready for the page
-  ✔ renders the chained totalAssets in whole units (0.0902ms)
-  ✔ groups the integer part of a large raw amount (0.0376ms)
-  ✔ renders the 19-digit share supply as SHARES, not as raw base units (0.0523ms)
-  ✔ can be asked for the ungrouped form (0.042ms)
-  ✔ shows an em dash for null -- an empty vault has no price, and 0 is a claim (0.1233ms)
-  ✔ returns an unparseable amount UNCHANGED rather than hiding the evidence (0.0584ms)
-✔ displayBaseUnits -- the chain's raw amounts, ready for the page (0.4795ms)
+  ✔ renders the chained totalAssets in whole units (0.1009ms)
+  ✔ groups the integer part of a large raw amount (0.0426ms)
+  ✔ renders the 19-digit share supply as SHARES, not as raw base units (0.0368ms)
+  ✔ can be asked for the ungrouped form (0.0308ms)
+  ✔ shows an em dash for null -- an empty vault has no price, and 0 is a claim (0.0331ms)
+  ✔ returns an unparseable amount UNCHANGED rather than hiding the evidence (0.0395ms)
+✔ displayBaseUnits -- the chain's raw amounts, ready for the page (0.3498ms)
 ▶ displayDecimal -- the service's formatted amounts, ready for the page
-  ✔ renders a price (0.0939ms)
-  ✔ renders a candle value with an 18-digit tail (0.028ms)
-  ✔ groups by default and can be asked not to -- even for a uint256-shaped value (0.0263ms)
+  ✔ renders a price (0.0932ms)
+  ✔ renders a candle value with an 18-digit tail (0.0247ms)
+  ✔ groups by default and can be asked not to -- even for a uint256-shaped value (0.0287ms)
   ✔ shows an em dash for null (0.0189ms)
-  ✔ returns a malformed value unchanged, so the disagreement stays visible (0.0318ms)
-✔ displayDecimal -- the service's formatted amounts, ready for the page (0.2588ms)
+  ✔ returns a malformed value unchanged, so the disagreement stays visible (0.0255ms)
+✔ displayDecimal -- the service's formatted amounts, ready for the page (0.2478ms)
 ▶ sharePercent
-  ✔ computes a percentage in BigInt for magnitudes a double cannot divide (0.0631ms)
-  ✔ truncates rather than rounds, so it can never read as more than the truth (0.0234ms)
-  ✔ returns null when there is no total to take a share of (0.0234ms)
-  ✔ returns null for values that are not integers (0.0592ms)
-  ✔ survives 18-decimal share counts (0.0508ms)
-✔ sharePercent (0.277ms)
+  ✔ computes a percentage in BigInt for magnitudes a double cannot divide (0.0723ms)
+  ✔ truncates rather than rounds, so it can never read as more than the truth (0.0252ms)
+  ✔ returns null when there is no total to take a share of (0.0199ms)
+  ✔ returns null for values that are not integers (0.0607ms)
+  ✔ survives 18-decimal share counts (0.0587ms)
+✔ sharePercent (0.3272ms)
 ▶ timeLabel and duration
-  ✔ formats a timestamp as zero-padded local HH:MM (0.582ms)
-  ✔ formats durations at each unit boundary (0.0737ms)
-  ✔ shows an em dash for an unknown duration (0.0424ms)
-✔ timeLabel and duration (0.7433ms)
+  ✔ formats a timestamp as zero-padded local HH:MM (0.5434ms)
+  ✔ formats durations at each unit boundary (0.056ms)
+  ✔ shows an em dash for an unknown duration (0.0593ms)
+✔ timeLabel and duration (0.7064ms)
 ▶ shortenAddress
-  ✔ keeps enough of an address to recognise it (0.0586ms)
-  ✔ handles null and short input without throwing (0.0246ms)
-✔ shortenAddress (0.1171ms)
+  ✔ keeps enough of an address to recognise it (0.0456ms)
+  ✔ handles null and short input without throwing (0.0299ms)
+✔ shortenAddress (0.1189ms)
 ℹ tests 46
 ℹ suites 9
 ℹ pass 46
@@ -211,56 +311,56 @@ format.test.ts
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 11.5221
+ℹ duration_ms 10.7849
 
 ========================================================================
 history.test.ts
 ========================================================================
 ▶ decimalsFrom
-  ✔ returns the pair the service reported (0.9275ms)
-  ✔ returns null -- never 6 and 18 -- when the response has no decimals at all (0.0949ms)
-  ✔ rejects a half-reported pair rather than completing it (0.0746ms)
-  ✔ rejects a decimals count that is not a usable integer (0.0794ms)
-  ✔ accepts the boundaries of the legitimate range (0.0665ms)
-✔ decimalsFrom (1.8058ms)
+  ✔ returns the pair the service reported (0.8603ms)
+  ✔ returns null -- never 6 and 18 -- when the response has no decimals at all (0.0858ms)
+  ✔ rejects a half-reported pair rather than completing it (0.0581ms)
+  ✔ rejects a decimals count that is not a usable integer (0.0726ms)
+  ✔ accepts the boundaries of the legitimate range (0.0642ms)
+✔ decimalsFrom (1.6372ms)
 ▶ amountCell
-  ✔ renders an absent amount as an em dash and says why (0.1585ms)
-  ✔ does NOT render an absent amount as zero (0.3156ms)
-  ✔ prints raw base units, marked inexact, when the decimals are unknown (0.0851ms)
-  ✔ formats past Number.MAX_SAFE_INTEGER exactly (0.124ms)
-  ✔ picks the decimals from the unit, so one string has two correct answers (0.1206ms)
-  ✔ shows an unparseable amount unchanged rather than hiding it behind an em dash (0.0707ms)
-✔ amountCell (1.0319ms)
+  ✔ renders an absent amount as an em dash and says why (0.1539ms)
+  ✔ does NOT render an absent amount as zero (0.2404ms)
+  ✔ prints raw base units, marked inexact, when the decimals are unknown (0.0819ms)
+  ✔ formats past Number.MAX_SAFE_INTEGER exactly (0.1157ms)
+  ✔ picks the decimals from the unit, so one string has two correct answers (0.0975ms)
+  ✔ shows an unparseable amount unchanged rather than hiding it behind an em dash (0.0673ms)
+✔ amountCell (0.9266ms)
 ▶ newestFirst
-  ✔ orders by block, newest first (0.1145ms)
-  ✔ orders two events in the SAME block by log index, newest first (0.0726ms)
-  ✔ returns a copy and leaves the caller's array alone (0.0745ms)
-✔ newestFirst (0.3275ms)
+  ✔ orders by block, newest first (0.1082ms)
+  ✔ orders two events in the SAME block by log index, newest first (0.0672ms)
+  ✔ returns a copy and leaves the caller's array alone (0.0722ms)
+✔ newestFirst (0.3103ms)
 ▶ kindLabel
-  ✔ labels the three kinds the decoder knows (0.0446ms)
-  ✔ passes an unknown kind through unchanged instead of calling it "Unknown" (0.0223ms)
-✔ kindLabel (0.0984ms)
+  ✔ labels the three kinds the decoder knows (0.0419ms)
+  ✔ passes an unknown kind through unchanged instead of calling it "Unknown" (0.0214ms)
+✔ kindLabel (0.0927ms)
 ▶ tallyKinds
-  ✔ adds the per-kind counts up itself and agrees with the service when they match (0.1191ms)
-  ✔ reports a disagreement instead of picking one of the two numbers (0.0537ms)
-  ✔ computes the sum rather than echoing the field it is checking (0.0405ms)
-  ✔ orders rows deterministically whatever order the service sent them in (0.0881ms)
-  ✔ breaks a tie on count by kind, so equal counts do not swap places (5.0739ms)
-  ✔ survives an empty tally without inventing rows (0.0784ms)
-✔ tallyKinds (5.5543ms)
+  ✔ adds the per-kind counts up itself and agrees with the service when they match (0.1083ms)
+  ✔ reports a disagreement instead of picking one of the two numbers (0.0489ms)
+  ✔ computes the sum rather than echoing the field it is checking (0.0331ms)
+  ✔ orders rows deterministically whatever order the service sent them in (0.0856ms)
+  ✔ breaks a tie on count by kind, so equal counts do not swap places (5.0048ms)
+  ✔ survives an empty tally without inventing rows (0.0617ms)
+✔ tallyKinds (5.4181ms)
 ▶ truncationLabel
-  ✔ says all of them when the table holds everything (0.1137ms)
-  ✔ says how many of how many when the table is truncated (0.0376ms)
-  ✔ reports an impossible count rather than clamping it (0.071ms)
-✔ truncationLabel (0.2907ms)
+  ✔ says all of them when the table holds everything (0.0963ms)
+  ✔ says how many of how many when the table is truncated (0.0359ms)
+  ✔ reports an impossible count rather than clamping it (0.0519ms)
+✔ truncationLabel (0.2349ms)
 ▶ priceRows
-  ✔ takes the newest rows and reverses them to newest first (0.2628ms)
-  ✔ normalises the price string it will display (0.0629ms)
-  ✔ returns nothing for a limit of zero instead of the whole series (0.0368ms)
-  ✔ returns the whole series, newest first, when the limit exceeds it (0.0607ms)
-  ✔ returns a copy and does not reverse the caller's series (0.0661ms)
-  ✔ renders a null price as an em dash, not as a number (0.043ms)
-✔ priceRows (0.8116ms)
+  ✔ takes the newest rows and reverses them to newest first (0.2152ms)
+  ✔ normalises the price string it will display (0.0539ms)
+  ✔ returns nothing for a limit of zero instead of the whole series (0.0375ms)
+  ✔ returns the whole series, newest first, when the limit exceeds it (0.0491ms)
+  ✔ returns a copy and does not reverse the caller's series (0.051ms)
+  ✔ renders a null price as an em dash, not as a number (0.0377ms)
+✔ priceRows (0.5341ms)
 ℹ tests 31
 ℹ suites 7
 ℹ pass 31
@@ -268,64 +368,97 @@ history.test.ts
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 14.9802
+ℹ duration_ms 14.2209
+
+========================================================================
+runtime-config.test.ts
+========================================================================
+▶ runtimeConfigPath
+  ✔ is `api/config` under the build's base path (0.3597ms)
+✔ runtimeConfigPath (1.2991ms)
+▶ loadRuntimeConfig accepts a generated config
+  ✔ returns the config the generator wrote, field for field (11.759ms)
+  ✔ accepts a snapshot config -- indexSnapshot true with a path to the captured files (0.2688ms)
+✔ loadRuntimeConfig accepts a generated config (12.1244ms)
+▶ loadRuntimeConfig refuses a config it cannot act on
+  ✔ refuses an indexSnapshot that is not a boolean, rather than defaulting it (1.0589ms)
+  ✔ names every problem at once, so one build log is one fix (0.8011ms)
+  ✔ refuses a config that claims a snapshot with nothing to have read it from (0.4634ms)
+  ✔ still ACCEPTS indexApiUrl: null with indexSnapshot false -- the no-route config stays valid (0.3255ms)
+  ✔ reports a non-200 as a config that was not generated, not as a page failure (0.1445ms)
+  ✔ reports a body that is not JSON, naming the path and the generator (0.1922ms)
+✔ loadRuntimeConfig refuses a config it cannot act on (3.1894ms)
+▶ indexApiUrlFor
+  ✔ joins a same-origin base to a service path without doubling the slash (0.2189ms)
+  ✔ keeps an absolute base absolute (0.0682ms)
+  ✔ returns null -- never a request against this page -- when there is no service (0.054ms)
+  ✔ does not care whether the snapshot flag is set, because it is about the URL only (0.0708ms)
+✔ indexApiUrlFor (0.4777ms)
+ℹ tests 13
+ℹ suites 4
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 21.1226
 
 ========================================================================
 wallet-amounts.test.ts
 ========================================================================
 ▶ the decimal-string boundary: what "Max" fills, and what the parser reads back
-  ✔ turns the demo wallet balance into a decimal string, exactly (0.6706ms)
-  ✔ produces a string that `parseAmount` reads back to the same base units -- the round trip (0.2752ms)
-  ✔ keeps a value a double cannot hold, which is the whole reason it is a string (0.0876ms)
-  ✔ groups nothing: a comma would be rejected by the parser that reads the field back (0.0994ms)
-  ✔ refuses zero and negative amounts before they reach a wallet (0.1022ms)
-  ✔ refuses more fraction digits than the asset has, rather than truncating them (0.1284ms)
-  ✔ accepts the shapes a person actually types (0.0991ms)
-  ✔ refuses the shapes that only look like amounts (0.0883ms)
-✔ the decimal-string boundary: what "Max" fills, and what the parser reads back (2.1564ms)
+  ✔ turns the demo wallet balance into a decimal string, exactly (0.4789ms)
+  ✔ produces a string that `parseAmount` reads back to the same base units -- the round trip (0.1962ms)
+  ✔ keeps a value a double cannot hold, which is the whole reason it is a string (0.0648ms)
+  ✔ groups nothing: a comma would be rejected by the parser that reads the field back (0.0916ms)
+  ✔ refuses zero and negative amounts before they reach a wallet (0.1046ms)
+  ✔ refuses more fraction digits than the asset has, rather than truncating them (0.1129ms)
+  ✔ accepts the shapes a person actually types (0.0892ms)
+  ✔ refuses the shapes that only look like amounts (0.0988ms)
+✔ the decimal-string boundary: what "Max" fills, and what the parser reads back (1.7893ms)
 ▶ figure: the one place a bigint becomes a display string
-  ✔ formats a bigint with the vault's own decimals, and does NOT group thousands (0.1883ms)
-  ✔ formats a raw integer STRING the same way, so both shapes of a read agree (0.2562ms)
-  ✔ shifts by the SHARE decimals when asked for shares, not by the asset's (0.1877ms)
-  ✔ prints an em dash for a figure that has not been read, never a zero (0.0393ms)
-  ✔ appends the unit when one is given (0.0552ms)
-✔ figure: the one place a bigint becomes a display string (0.8743ms)
+  ✔ formats a bigint with the vault's own decimals, and does NOT group thousands (0.2282ms)
+  ✔ formats a raw integer STRING the same way, so both shapes of a read agree (0.1628ms)
+  ✔ shifts by the SHARE decimals when asked for shares, not by the asset's (0.0844ms)
+  ✔ prints an em dash for a figure that has not been read, never a zero (0.0334ms)
+  ✔ appends the unit when one is given (0.0436ms)
+✔ figure: the one place a bigint becomes a display string (0.6804ms)
 ▶ allowanceCovers: the comparison the approve-or-deposit decision rests on
-  ✔ is an exact comparison with no off-by-one (0.0592ms)
-  ✔ treats type(uint256).max as sufficient without arithmetic (0.0359ms)
-✔ allowanceCovers: the comparison the approve-or-deposit decision rests on (0.1516ms)
+  ✔ is an exact comparison with no off-by-one (0.0677ms)
+  ✔ treats type(uint256).max as sufficient without arithmetic (0.0425ms)
+✔ allowanceCovers: the comparison the approve-or-deposit decision rests on (0.1458ms)
 ▶ the pre-flight decision: what is offered, and in which order
-  ✔ decides "no wallet" before anything that needs an address (0.1374ms)
-  ✔ decides "wrong chain" before the amount is looked at (0.0445ms)
-  ✔ refuses an over-balance deposit BEFORE the allowance is considered (0.0556ms)
-  ✔ offers the approval step when the allowance falls short, and says by how much it is short (0.0451ms)
-  ✔ offers a single deposit when the allowance already covers it (0.036ms)
-  ✔ re-decides from the allowance it is GIVEN, so a consumed allowance brings the approval back (0.0399ms)
-  ✔ treats an unread balance or allowance as unknown, not as zero (0.0536ms)
-  ✔ is neutral about an empty field, which is not a mistake (0.0388ms)
-✔ the pre-flight decision: what is offered, and in which order (0.5378ms)
+  ✔ decides "no wallet" before anything that needs an address (0.1281ms)
+  ✔ decides "wrong chain" before the amount is looked at (0.0389ms)
+  ✔ refuses an over-balance deposit BEFORE the allowance is considered (0.0525ms)
+  ✔ offers the approval step when the allowance falls short, and says by how much it is short (0.0461ms)
+  ✔ offers a single deposit when the allowance already covers it (0.0301ms)
+  ✔ re-decides from the allowance it is GIVEN, so a consumed allowance brings the approval back (0.0378ms)
+  ✔ treats an unread balance or allowance as unknown, not as zero (0.0538ms)
+  ✔ is neutral about an empty field, which is not a mistake (0.0268ms)
+✔ the pre-flight decision: what is offered, and in which order (0.4972ms)
 ▶ the approval amount is the deposit, and nothing else
-  ✔ equals the amount being deposited (0.0792ms)
-  ✔ is null when the decision is not an approval (0.0559ms)
-✔ the approval amount is the deposit, and nothing else (0.1944ms)
+  ✔ equals the amount being deposited (0.0892ms)
+  ✔ is null when the decision is not an approval (0.0545ms)
+✔ the approval amount is the deposit, and nothing else (0.1886ms)
 ▶ the redeem pre-flight
-  ✔ needs no allowance at all -- there is nothing to approve (0.0992ms)
-  ✔ reads the field in SHARES, with the share decimals and not the asset's (0.0358ms)
-  ✔ refuses more shares than the wallet holds, with the balance in the sentence (0.0502ms)
-  ✔ allows redeeming the whole balance exactly, with no off-by-one (0.0444ms)
-✔ the redeem pre-flight (0.2773ms)
+  ✔ needs no allowance at all -- there is nothing to approve (0.095ms)
+  ✔ reads the field in SHARES, with the share decimals and not the asset's (0.0337ms)
+  ✔ refuses more shares than the wallet holds, with the balance in the sentence (0.0631ms)
+  ✔ allows redeeming the whole balance exactly, with no off-by-one (0.0385ms)
+✔ the redeem pre-flight (0.2789ms)
 ▶ transaction state: five values, and the rejection is not one of the red ones
-  ✔ maps EIP-1193 4001 to `rejected`, from a nested cause (0.182ms)
-  ✔ recognises a rejection that arrives as a class name or a phrase, with no code (0.116ms)
-  ✔ does not mistake a revert for a rejection (0.1328ms)
-  ✔ survives an error whose `cause` points at itself (0.0601ms)
-  ✔ keeps the five phases distinct values (0.0559ms)
-  ✔ never reports an unread receipt as a failure of the transaction (0.1026ms)
-  ✔ maps a wait state to pending rather than inventing an outcome (0.0524ms)
-  ✔ reports a reverted receipt as failed, with the hash kept (0.0409ms)
-  ✔ distinguishes an unreadable receipt from a reverted one (0.0349ms)
-  ✔ finds a readable line in any error shape, and never returns an empty string (0.0341ms)
-✔ transaction state: five values, and the rejection is not one of the red ones (0.9254ms)
+  ✔ maps EIP-1193 4001 to `rejected`, from a nested cause (0.1709ms)
+  ✔ recognises a rejection that arrives as a class name or a phrase, with no code (0.104ms)
+  ✔ does not mistake a revert for a rejection (0.1502ms)
+  ✔ survives an error whose `cause` points at itself (0.0562ms)
+  ✔ keeps the five phases distinct values (0.0467ms)
+  ✔ never reports an unread receipt as a failure of the transaction (0.0919ms)
+  ✔ maps a wait state to pending rather than inventing an outcome (0.0455ms)
+  ✔ reports a reverted receipt as failed, with the hash kept (0.0411ms)
+  ✔ distinguishes an unreadable receipt from a reverted one (0.0319ms)
+  ✔ finds a readable line in any error shape, and never returns an empty string (0.0294ms)
+✔ transaction state: five values, and the rejection is not one of the red ones (0.8682ms)
 ℹ tests 39
 ℹ suites 7
 ℹ pass 39
@@ -333,37 +466,37 @@ wallet-amounts.test.ts
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 10.482
+ℹ duration_ms 10.1655
 
 ========================================================================
 wallet-flow.test.ts
 ========================================================================
-✔ no wallet is decided first, because nothing can be read for it (0.6045ms)
-✔ wrong chain is decided before the amount is even looked at (0.2513ms)
-✔ an empty field is neutral, not an error (0.0708ms)
-✔ an unparseable amount is invalid and carries the parser sentence (0.2656ms)
-✔ an unread figure is invalid rather than assumed (0.1602ms)
-✔ MORE THAN THE BALANCE IS REFUSED BEFORE ANY WALLET PROMPT, and names the balance (0.1648ms)
-✔ THE BALANCE IS CHECKED BEFORE THE ALLOWANCE -- approving first would cost gas to learn it (0.0773ms)
-✔ a short allowance offers the approval step, not a doomed deposit (0.0784ms)
-✔ an allowance that already covers it offers a plain deposit (0.0774ms)
-✔ an allowance exactly equal to the amount is enough -- not off by one (0.1171ms)
-✔ THE ALLOWANCE IS NOT REMEMBERED: a consumed allowance brings the approve step back (0.0726ms)
-✔ allowanceCovers is a plain comparison with no rounding (0.104ms)
-✔ readAmountInput keeps a decimal amount decimal and refuses silly precision (0.1004ms)
-✔ maxAmountDecimal produces a decimal string, never a base-unit integer (0.0766ms)
-✔ a user rejection is its own phase, not a failure (0.1361ms)
-✔ a nested cause is searched for 4001, because the code is rarely on the outer error (0.0617ms)
-✔ a non-rejection error is a failure and the revert reason reaches the reader (0.1335ms)
-✔ a viem-style wrapped error keeps the verbose text in detail, out of the headline (0.1104ms)
-✔ the fallback sentence is used when the error carries nothing readable (0.0374ms)
-✔ the four write phases are distinct values (0.0319ms)
-✔ a reverted receipt is a FAILURE, never a confirmation and never "waiting" (0.1369ms)
-✔ a receipt with no status yet stays pending, because the outcome is unknown (0.0391ms)
-✔ redeem refuses more shares than the wallet holds, before any prompt (0.0768ms)
-✔ redeem needs no approval, because it burns the caller's own shares (0.0324ms)
-✔ redeem applies the same ordering: wallet, chain, empty, parse, balance (0.0647ms)
-✔ redeem of exactly the whole balance is allowed, not off by one (0.0331ms)
+✔ no wallet is decided first, because nothing can be read for it (0.6378ms)
+✔ wrong chain is decided before the amount is even looked at (0.1214ms)
+✔ an empty field is neutral, not an error (0.0692ms)
+✔ an unparseable amount is invalid and carries the parser sentence (0.2443ms)
+✔ an unread figure is invalid rather than assumed (0.0914ms)
+✔ MORE THAN THE BALANCE IS REFUSED BEFORE ANY WALLET PROMPT, and names the balance (0.1399ms)
+✔ THE BALANCE IS CHECKED BEFORE THE ALLOWANCE -- approving first would cost gas to learn it (0.0702ms)
+✔ a short allowance offers the approval step, not a doomed deposit (0.0681ms)
+✔ an allowance that already covers it offers a plain deposit (0.0929ms)
+✔ an allowance exactly equal to the amount is enough -- not off by one (0.1323ms)
+✔ THE ALLOWANCE IS NOT REMEMBERED: a consumed allowance brings the approve step back (0.0771ms)
+✔ allowanceCovers is a plain comparison with no rounding (0.0557ms)
+✔ readAmountInput keeps a decimal amount decimal and refuses silly precision (0.0999ms)
+✔ maxAmountDecimal produces a decimal string, never a base-unit integer (0.073ms)
+✔ a user rejection is its own phase, not a failure (0.1364ms)
+✔ a nested cause is searched for 4001, because the code is rarely on the outer error (0.064ms)
+✔ a non-rejection error is a failure and the revert reason reaches the reader (0.1359ms)
+✔ a viem-style wrapped error keeps the verbose text in detail, out of the headline (0.1164ms)
+✔ the fallback sentence is used when the error carries nothing readable (0.0418ms)
+✔ the four write phases are distinct values (0.0287ms)
+✔ a reverted receipt is a FAILURE, never a confirmation and never "waiting" (0.1429ms)
+✔ a receipt with no status yet stays pending, because the outcome is unknown (0.0382ms)
+✔ redeem refuses more shares than the wallet holds, before any prompt (0.0744ms)
+✔ redeem needs no approval, because it burns the caller's own shares (0.031ms)
+✔ redeem applies the same ordering: wallet, chain, empty, parse, balance (0.0595ms)
+✔ redeem of exactly the whole balance is allowed, not off by one (0.0351ms)
 ℹ tests 26
 ℹ suites 0
 ℹ pass 26
@@ -371,8 +504,8 @@ wallet-flow.test.ts
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 7.9735
+ℹ duration_ms 7.9057
 
 ========================================================================
-8/8 test files passed
+10/10 test files passed
 all green
