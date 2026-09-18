@@ -62,6 +62,17 @@ const BASE_PATH = (() => {
 })();
 const BASE_ROOT = BASE_PATH === '/' ? '' : BASE_PATH.replace(/\/$/, '');
 const manageUrl = (query) => `${ORIGIN}${BASE_ROOT}/vault/manage/${query === undefined ? '' : `?${query}`}`;
+/**
+ * A fresh query string for every load, so a scenario can never measure a CACHED document.
+ *
+ * The exported HTML is a loading screen that names the build's own hashed chunk files, and a host
+ * may serve it from cache for minutes (GitHub Pages sends `max-age=600`): a cached document from the
+ * previous deployment loads the previous deployment's code, which would turn "did the fix work?"
+ * into a question about the CDN. The parameter is ignored by the router and by the app; the stub
+ * reads only `stubChain`.
+ */
+const freshQuery = (chainId) =>
+  `stubChain=${hexChain(chainId)}&run=${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 const results = [];
 const check = (name, ok, detail) => {
@@ -275,7 +286,7 @@ check('the stub provider is registered to install before any page script', typeo
  * abort the very scenario that has to fail.
  */
 async function loadWith(chainId) {
-  await wb('navigate', { url: manageUrl(`stubChain=${hexChain(chainId)}`), newTab: false });
+  await wb('navigate', { url: manageUrl(freshQuery(chainId)), newTab: false });
   await until(`(() => {
     const hasAddress = /0x[0-9a-fA-F]{4}…[0-9a-fA-F]{4}/.test(document.body.innerText);
     const button = Array.from(document.querySelectorAll('button')).find((b) => /Connect wallet/.test(b.textContent));

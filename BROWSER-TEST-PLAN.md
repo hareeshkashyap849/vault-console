@@ -478,13 +478,116 @@ the console column means "the console errors and uncaught exceptions this page p
 >   proven in a unit test and is **not** what this capture shows. Row 6 (insufficient gas) is untouched —
 >   no under-funded wallet was driven. The capture also does not touch rows 1, 2, 3, 5, 7 and 8, whose
 >   conditions were not injected at any point in this session.
+>
+> **Fourth amendment, 2026-09-18 (local clock read `2026-09-18 08:0x +08:00`). A person clicked the
+> published console and found TWO DEFECTS in the write path — one of which told a reader who had
+> just pressed Reject that their approval was on its way. This block is added, not substituted: rows
+> 2, 3 and 4 above are true of the 2026-09-16/17 runs and the wording rows below them are still not
+> `passed`, so they are kept, and their status cells gain a dated note. Both defects are fixed in
+> commit `413ce8e`, and both fixes are re-measured on the published page.**
+>
+> **What the person did, and what the page answered.** The published console —
+> `https://hareeshkashyap849.github.io/vault-console/vault/manage/` — an amount entered, `Deposit`
+> clicked, the wallet's approve prompt shown, and then:
+>
+> - **Reject.** The page rendered `Waiting for the chain(approve)` and
+>   `Approval sent. The wallet prompt is done; this waits for the chain to include it.`, and the
+>   deposit control stayed disabled (`Waiting for the wallet…`) with no way back. The chain says
+>   otherwise: `allowance` is `0` and the account's nonce did not move (unchanged at `6`) across the
+>   whole episode. **A reader who rejected was told a transaction existed, and waited for it.**
+> - **Switch the wallet to another network, then send.** The page attempted the `approve` anyway and
+>   the failure came back from the chain rather than from the app: `The contract function "approve"
+>   reverted with the following reason: RPC 0x2105 Infura eth_sendRawTransaction: gas required
+>   exceeds allowance (0)` — with `0x2105` = **8453, Base mainnet**, where this deployment does not
+>   exist. The only thing that stopped it was that the wallet has no ETH on that chain.
+>
+> **Defect 1 was in the SEAM between the taxonomy and the render, and the taxonomy was right.**
+> `mapWriteError` classified the EIP-1193 `4001` correctly — `test/wallet-flow.test.ts` asserted that
+> and passed throughout, which is why no unit test saw this. The component then threw the answer
+> away: it folded its local state with the receipt watch as
+> `phase === 'idle' ? IDLE : mapReceipt(step, { ...receipt, hash })`, and
+> `useWaitForTransactionReceipt({ hash: undefined })` is a **disabled** query whose TanStack status
+> is `'pending'`. So `mapReceipt` answered *waiting for the chain* for a write with no hash and no
+> transaction, and the two phases that can never have one — `rejected` and `failed` — were
+> overwritten by a receipt that describes nothing. The fix is **the missing entry point in the
+> taxonomy**: `txStateFor(step, local, receipt)` in `src/lib/txState.ts` states the rule once — *a
+> receipt describes a transaction, so it may only move a write that HAS one* — and both forms use it.
+>
+> **Defect 2 was in the guard's INPUT, which made the guard a tautology.** `decideDeposit` refuses
+> `walletChainId !== chainId`, and the value handed to it came from `useChainId()`, which returns
+> `config.state.chainId`. `createConfig` deliberately does **not** copy a connection's chain into it
+> when that chain is not in `config.chains`:
+>
+>     // If chain is not configured, then don't switch over to it.
+>     if (!chains.getState().some((x) => x.id === chainId)) return;
+>     (node_modules/wagmi/node_modules/@wagmi/core/dist/esm/createConfig.js)
+>
+> This app configures ONE chain — the deployment's — so a wallet on any other chain left
+> `state.chainId` equal to the deployment's chain, and the check compared the app's chain with
+> itself. It was **not** advisory, **not** in a branch the deposit flow skips, and **not** after the
+> send: it was a comparison of one value with itself whenever the wallet left `config.chains`. The
+> wallet's chain now comes from the connection (`useConnection().chainId`), which IS updated for an
+> unconfigured chain; and because a switch can land between the render that drew the button and the
+> click that uses it, the write path asks the wallet again (`connector.getChainId()` via
+> `walletChainNow` in `src/lib/wagmi.ts`) immediately before every send. A refusal creates no
+> transaction state — nothing was sent — and uses the same sentence the decision uses, so the two
+> cannot disagree: *"Switch the wallet to chain 84532 -- it is currently on chain 8453, where this
+> deployment does not exist. Nothing is sent until it does."*
+>
+> **How it was measured without a wallet prompt, and what that cannot show.**
+> `tools/wallet-double-assert.mjs` drives the published page through the same kimi-webbridge/CDP
+> route as `tools/browser-assert.mjs` and installs a **stub EIP-1193 provider** with
+> `Page.addScriptToEvaluateOnNewDocument`, so it is in place before any page script runs (a stub
+> installed afterwards races the app's own reconnect and the measurement would depend on who won).
+> The stub answers what a wallet answers — `eth_accounts`, `eth_chainId`, `eth_sendTransaction` —
+> refuses the send with `4001`, and logs every call. **No transaction is signed, broadcast or
+> prompted.** What it cannot show: a real MetaMask prompt, a real signature, a real chain. Rows 6, 7
+> and 8 are untouched by it, and rows 2, 3 and 4 stay short of `passed` for exactly that reason.
+>
+> | Run — published page, stub wallet (`tools/wallet-double-assert.mjs`) | Result |
+> |---|---|
+> | **before the fix, on the published page** — the code the person clicked | **9 passed / 12 failed of 21**. The failures include, verbatim: `A: ... the write panel reads "Waiting for the chain(approve)\n\nApproval sent. The wallet prompt is done; this waits for the chain to include it."` · `B: a write control was offered: "1. Approve USDC"` and `the wallet was asked to send: [{"method":"eth_sendTransaction","params":[{"data":"0x095ea7b3…000f4240","from":"0x2aE7…E034","to":"0x036CbD…CF7e"}]}]` · `C1: the wallet panel reads 84532 and still says "matches the deployment"` while the stub reports 8453 |
+> | **before the fix, rebuilt locally** from `46141bc` (`_site-old`, same tool revision as the run below) | **9 passed / 12 failed of 21** — the same 12 |
+> | **after the fix, local export of the fixed sources** | **21 passed / 0 failed of 21** |
+> | **after the fix, the PUBLISHED site** (Pages run `35289154354`, head `413ce8e`, success) | **21 passed / 0 failed of 21** |
+>
+> Evidence: `verification/out/wallet-double-assert-OLD-CODE-published.txt` (the first row; it predates
+> two probe refinements — a cache-busting query and an explicit connect step — that changed no
+> assertion's meaning), `verification/out/wallet-double-assert-OLD-CODE-local-build.txt`,
+> `verification/out/wallet-double-assert-FIXED-local.txt`,
+> `verification/out/wallet-double-assert-LIVE-after-deploy.txt`.
+>
+> **The CI half.** `test/write-guards.test.ts` (9 tests) asserts the fold and the chain refusal with
+> no wallet and no chain. Run against the published code it fails at the import —
+> `SyntaxError: The requested module '../src/lib/vaultActions.ts' does not provide an export named
+> 'chainRefusalFor'` — because the guard it asserts did not exist
+> (`verification/out/write-guards-test-against-published-code.txt`). A test that passes on the old
+> code is not a regression test, so the behavioural proof is the table above; this one is the part
+> that can run on every push.
+>
+> **The stub wallet is a new test double, and `TEST-DOUBLES.md` records it.** That file said this
+> project has no fake wallet; the sentence was true and is now false, so it is amended there rather
+> than here.
+>
+> **The tool of record was re-run against the published site after the redeploy, and nothing else
+> moved**: `node --import …/fetch-via-socks.mjs tools/browser-assert.mjs --url
+> https://hareeshkashyap849.github.io/vault-console/` → **58 passed / 0 failed / 0 skipped, of 58
+> assertions, exit 0** (`verification/out/browser-assert-against-export-2026-09-18-after-write-guards.txt`),
+> the same 58 this file recorded before the change. It also re-read the published snapshot: the
+> history page renders **3 event rows** and its count label claims 3 — the third deposit is in the
+> published artefact, not only in the index repository.
+>
+> **The one thing this amendment does not claim.** The two defects were found by a person, not by a
+> test, and the test that would have caught either one is the one added here — written after the
+> click, not before it. Nothing above says the write path is now measured end to end with a real
+> wallet; §8's verdict is unchanged.
 
 | # | Failure class | How it is injected | What is asserted (wording + rendered result + state) | Evidence requirement | Status |
 |---|---|---|---|---|---|
 | 1 | Wallet not installed | Open `/vault/manage` in a browser with no extension | `"No injected wallet was found in this browser. This app uses injected() …"`, and the deposit and redeem controls stay inert rather than accepting input that could never be signed | screenshot: **not run** | **implemented; interaction not measured** |
-| 2 | The user refuses to sign (`4001`) | Reject at the MetaMask prompt | A **neutral** line, never a red failure; the form returns to idle and says the user cancelled and nothing was signed. `mapWriteError` checks `4001` first so no later branch can reclassify it | screenshot: **not run** | **logic proven** (`test/wallet-flow.test.ts`: *a user rejection is its own phase, not a failure*, and the nested-cause case); **interaction not measured** |
-| 3 | Wrong chain | Wallet on chain 8453, page expecting 31337 | The controls are **disabled with a reason naming both chains** — *"Switch the wallet to chain 31337 — it is currently on chain 8453, where this deployment does not exist. Nothing is sent until it does."* — and **no wallet prompt appears** | screenshot: **not run** + transaction hash: **not applicable, nothing is sent** | **logic proven** (`decideDeposit` → `wrong-chain`, and it outranks an unparseable amount); **interaction not measured** |
-| 4 | Insufficient allowance | Fresh wallet, zero allowance, then deposit | The **approve step is offered instead of a deposit**; a deposit that would revert with `ERC20InsufficientAllowance` is never sent | screenshot: `verification/out/wallet-manage-approve-step-offered-2026-09-18.png` — **post-hoc; it does not show the signing** (third amendment) | **logic proven**, including the case where the allowance was consumed and must be re-read; **partly measured 2026-09-17** — a person deposited from a zero allowance and the chain now reports **`1000000`** (1.0 USDC) on the account named in the amendment above, so the approve really did run and change state. **The approving transaction is now identified**: `0xac558a4be8b234374e64a6be08fc9532fe2488f28dbc46cf495cfeeb7dd00ffc`, block **46945057**, `Approval` value **`1000000`**, spender the vault, `from` the account itself (see the second amendment). **The page's offer is now measured too** (third amendment): with the allowance at `0` and an amount typed in, the published form rendered *"The vault's allowance is 0 USDC, which does not cover this deposit. Approving is the next step; the deposit follows it."* and offered **`1. Approve USDC`** — so the row's central claim, *the approve step is offered instead of a deposit*, is read off the page rather than inferred. **Still not `passed`**: the half of the row about a reverting deposit never being sent is proven only in a unit test, and the capture is after both transactions, so it shows the form's decision and not the interaction |
+| 2 | The user refuses to sign (`4001`) | Reject at the MetaMask prompt | A **neutral** line, never a red failure; the form returns to idle and says the user cancelled and nothing was signed. `mapWriteError` checks `4001` first so no later branch can reclassify it | screenshot: **not run** | **logic proven** (`test/wallet-flow.test.ts`: *a user rejection is its own phase, not a failure*, and the nested-cause case); **interaction not measured** — **AND ONE REAL CLICK WAS ANSWERED WRONGLY, 2026-09-18**: a person pressed Reject and the published page rendered `Waiting for the chain(approve)` / `Approval sent. The wallet prompt is done; this waits for the chain to include it.` while the chain reported `allowance 0` and an unmoved nonce. The taxonomy was right and the render overwrote it; fixed in `413ce8e` (`txStateFor`), re-measured on the published page at **21/21** with a stub provider that answers `4001`. **Still not `passed`**: no real wallet prompt was driven, so "MetaMask's prompt is followed by this wording in a real session" remains unmeasured — what is measured is the page's answer to a rejection |
+| 3 | Wrong chain | Wallet on chain 8453, page expecting 31337 | The controls are **disabled with a reason naming both chains** — *"Switch the wallet to chain 31337 — it is currently on chain 8453, where this deployment does not exist. Nothing is sent until it does."* — and **no wallet prompt appears** | screenshot: **not run** + transaction hash: **not applicable, nothing is sent** | **logic proven** (`decideDeposit` → `wrong-chain`, and it outranks an unparseable amount); **interaction not measured** — **AND THE GUARD COULD NOT FIRE, 2026-09-18**: the injected chain was 8453 against a deployment on **84532** (the `31337` above is the pre-Base-Sepolia copy), and the published page read *"Wallet chain 84532 / matches the deployment"* while the wallet was on 8453, offered `1. Approve USDC`, and put an `approve` in front of the wallet on that foreign chain — the failure came back from the chain (`gas required exceeds allowance (0)` from `0x2105`), not from the app. The guard's input was `useChainId()`, which is the app's own chain and is not updated for a chain outside `config.chains`, so the check compared one value with itself. Fixed in `413ce8e` (the connection's chain, plus the wallet asked again at the moment of each send); the published page now names both chains and offers no control, measured at **21/21**. **Still not `passed`**: no real wallet switch was driven, so the row's "no wallet prompt appears" half rests on the stub rather than on MetaMask |
+| 4 | Insufficient allowance | Fresh wallet, zero allowance, then deposit | The **approve step is offered instead of a deposit**; a deposit that would revert with `ERC20InsufficientAllowance` is never sent | screenshot: `verification/out/wallet-manage-approve-step-offered-2026-09-18.png` — **post-hoc; it does not show the signing** (third amendment) | **logic proven**, including the case where the allowance was consumed and must be re-read; **partly measured 2026-09-17** — a person deposited from a zero allowance and the chain now reports **`1000000`** (1.0 USDC) on the account named in the amendment above, so the approve really did run and change state. **The approving transaction is now identified**: `0xac558a4be8b234374e64a6be08fc9532fe2488f28dbc46cf495cfeeb7dd00ffc`, block **46945057**, `Approval` value **`1000000`**, spender the vault, `from` the account itself (see the second amendment). **The page's offer is now measured too** (third amendment): with the allowance at `0` and an amount typed in, the published form rendered *"The vault's allowance is 0 USDC, which does not cover this deposit. Approving is the next step; the deposit follows it."* and offered **`1. Approve USDC`** — so the row's central claim, *the approve step is offered instead of a deposit*, is read off the page rather than inferred. **Still not `passed`**: the half of the row about a reverting deposit never being sent is proven only in a unit test, and the capture is after both transactions, so it shows the form's decision and not the interaction — **and on 2026-09-18 this row's control was clicked for real, twice over: a person pressed `Deposit`, the wallet showed the approve prompt for exactly this `1. Approve USDC`, and the two clicks at that prompt (Reject, and a send from the wrong chain) are the two defects recorded in the fourth amendment, both fixed in `413ce8e`. The fourth amendment also re-measured this offer on the published page after the fix (`1. Approve USDC` for 1 unit against `allowance 0`), so the offer itself still holds** |
 | 5 | Insufficient balance | Enter more than the wallet holds | The reason carries the **real balance, formatted** (`5555.0759` and the symbol), never the bare word "insufficient"; refused **before** any approval, because an approval needs no balance and approving first would spend gas to learn a free fact | screenshot: **not run** | **logic proven** (`decideDeposit` → `exceeds-balance`, and the balance check is asserted to win over the allowance check); **interaction not measured** |
 | 6 | Insufficient gas | Drain the wallet's ETH, then deposit | **No dedicated copy: this is a recorded gap.** The app does not pre-compute gas, so an under-funded wallet fails at the wallet or the node and that error arrives through the failure path | screenshot: **not run** | **not implemented as a pre-flight check**. **One such failure was observed verbatim on 2026-09-17** — `insufficient funds for gas * price + value: have 352712045842 want 898152800000` (see the amendment above) — which is evidence the error does reach the failure path. It is **not** evidence about what this app renders for it: the session left that failure's order and cause unresolved and captured no rendered text |
 | 7 | Transaction reverted | Force a revert, or deposit with an allowance that becomes insufficient | `"The chain reverted this transaction."` with the hash **kept** so it can be looked up, and viem's text in a collapsed `detail`. `mapReceipt` maps `'reverted'` to `failed` — **never** to `confirmed`, and never to still-pending | screenshot: **not run** + transaction hash: **not run** | **logic proven**; **interaction not measured** |
