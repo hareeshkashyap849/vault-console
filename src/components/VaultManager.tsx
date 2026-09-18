@@ -18,7 +18,7 @@ import { RedeemForm } from '@/components/RedeemForm';
 import { figure } from '@/lib/vaultActions';
 import { shortenAddress } from '@/lib/format';
 import { ERC20_ABI, VAULT_ABI } from '@/lib/chain';
-import { addChainParameterFor } from '@/lib/wagmi';
+import { addChainParameterFor, walletAccountsNow } from '@/lib/wagmi';
 import { classifyWalletError } from '@/lib/walletError';
 import { chainSwitchFailureText } from '@/lib/walletFailureCopy';
 
@@ -132,18 +132,46 @@ export function VaultManager({
   // reads, and `useChainId()` is not it -- that one is the app's chain and cannot see a wallet on a
   // chain this app has no deployment for.
   const walletChainId = connection.chainId ?? null;
-  const account = connection.isConnected ? connection.address : undefined;
   /**
-   * CONNECTED, AND NO ACCOUNT TO SHOW.
+   * WHICH ACCOUNT THE PAGE MAY RENDER, WHICH IS NOT THE SAME AS THE ONE WAGMI REMEMBERS.
    *
-   * `getConnection()` takes `address` from `connection.accounts[0]`, and `isConnected` from the
-   * config's status -- so a wallet that answers `eth_accounts` with an empty array produces
-   * `isConnected: true` with `address: undefined`, and a wallet that has not answered at all
-   * (`status: 'reconnecting'`) produces `isConnected: false` with `address: undefined`. Both are
-   * "the page cannot read this wallet's account", which is one fact with one notice, and neither is
-   * "no wallet is connected" -- which is what the page used to render, beside a connection control
-   * and a stale address.
+   * `getConnection()` takes `address` from the connection wagmi RESTORED from its own persisted
+   * store, so a wallet that has since stopped offering an account still leaves a good-looking
+   * address there. Measured on the published console: with `eth_accounts` answering `[]`, the page
+   * rendered `Address 0x2aE7…E034`, a balance read for that account, `Wallet chain 84532 / matches
+   * the deployment`, and offered `1. Approve USDC` -- a control that could only fail, whose click
+   * then left the button reading `Waiting for the wallet…` for ever. **A first version of this fix
+   * read `connection.address === undefined` and could not fire on that page at all**, because the
+   * address was never undefined: it had been reconstructed, not read from the wallet.
+   *
+   * So the wallet is ASKED (`walletAccountsNow` in `src/lib/wagmi.ts`, `eth_accounts`, which never
+   * prompts) and its answer decides. `null` means the wallet did not answer, and then wagmi's value
+   * stands -- nothing has been shown to be wrong. An EMPTY ARRAY means it is offering nothing, and
+   * the connection's stored address is not rendered at all. `walletAccountMissing` is that case, and
+   * it also covers a connector that is still reconnecting -- an address not confirmed by the wallet
+   * now is exactly the thing this exists to stop presenting as fact.
    */
+  const connectorRef = connection.connector;
+  const [liveAccounts, setLiveAccounts] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (connectorRef === undefined) {
+      setLiveAccounts(null);
+      return;
+    }
+    let cancelled = false;
+    void walletAccountsNow(connectorRef)
+      .then((accounts) => {
+        if (!cancelled) setLiveAccounts(accounts);
+      })
+      .catch(() => {
+        if (!cancelled) setLiveAccounts(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connectorRef, connection.address, connection.status]);
+  const walletOffersNoAccount = liveAccounts !== null && liveAccounts.length === 0;
+  const account = walletOffersNoAccount || !connection.isConnected ? undefined : connection.address;
   const walletAccountMissing = account === undefined && (connection.isConnected || connection.status === 'reconnecting');
   const isWrongChain = account !== undefined && walletChainId !== chainId;
 

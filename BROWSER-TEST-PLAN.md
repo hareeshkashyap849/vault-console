@@ -612,6 +612,16 @@ the console column means "the console errors and uncaught exceptions this page p
 >   wallet_addEthereumChain first.`) and again with `4001` (the reader declining the switch): the
 >   rendered text was identical in both runs and identical to the pre-click text.
 >
+> **A third finding was written up and then withdrawn, and the withdrawal is part of the record.**
+> The empty-`eth_accounts` scenario rendered a stale address with a write control on the published
+> page, and that was first recorded as a third defect. Four further runs and a probe of the page's
+> own providers showed the cause: **the stub loses `window.ethereum` to the real MetaMask extension on
+> the published origin**, so the wallet answering `[]` was not the wallet wagmi reconnected from —
+> the address on screen belonged to the real, connected extension, and the empty answer never reached
+> the app. The instrument was measuring the wrong wallet. That finding is now carried as a
+> **guard** on an invariant rather than as evidence of a defect, and the code it produced is recorded
+> as **defensive** in the class table above.
+>
 > **What the page had no copy for, class by class, before and after.** Each row is a class the wallet
 > can produce; "before" is what the published page rendered under the stub, "after" is what it
 > renders now.
@@ -620,40 +630,83 @@ the console column means "the console errors and uncaught exceptions this page p
 > |---|---|---|
 > | `4001` declined send | `You cancelled this(approve)` + the neutral sentence — **correct**, and the one class that already had copy (row 2's fix, `413ce8e`) | unchanged |
 > | `4001` declined chain switch | the pre-click refusal, unchanged — **nothing about the attempt** | `The chain switch was cancelled in the wallet, so the wallet is still not on chain 84532 (Base Sepolia). Nothing is sent until it is.` |
-> | `4902` chain the wallet does not know | the pre-click refusal, unchanged — **nothing about the attempt** | the same switch sentence, plus (measured) the app **offering the chain** via `wallet_addEthereumChain`, which is what the wallet's own sentence asks for |
+> | `4902` chain the wallet does not know | the pre-click refusal, unchanged — **nothing about the attempt** | the same switch sentence, plus (measured) the app **offering the chain** via `wallet_addEthereumChain`, which is what the wallet's own sentence asks for. **The `4902` itself is not recoverable at this layer**, and that is measured: wagmi's `switchChain` folds the switch failure into the add attempt, so the error that reaches the app is the ADD's `4001`. Every refusal on this path therefore renders the same true sentence, and none of them claims which prompt was declined |
 > | `4900` mid-flight disconnect | `The transaction failed(approve)` / `The Provider is disconnected from all chains.` | `The wallet disconnected while this request was in flight, so nothing was signed and nothing was sent. Reconnect it to chain 84532 (Base Sepolia) and ask again.` — with the provider's words kept in the disclosure |
-> | `eth_accounts → []` (no account) | a **stale address**, a balance read for it, and `1. Approve USDC`; the click then left the control reading `Waiting for the wallet…` for ever with no notice | no address, no write control, and the state said out loud — measured on the published site as its no-wallet state with a connect control, which is correct |
-> | insufficient gas (§5 row 6) | **no class at all**: the app printed the chain's own text (`gas required exceeds allowance (0)`, and on 2026-09-17 `insufficient funds for gas * price + value: …`) | the class has its own sentence and its own classification — **but see the limit below: the stub cannot make the page report it** |
+> | `eth_accounts → []` (no account) | **not reachable by this instrument on the published site, measured four times out of four** — see below | a defensive branch: without the wallet's confirmation no address is rendered, and the state is said out loud |
+> | insufficient funds for gas (§5 row 6) | **no class at all**: the app printed the chain's own text (`gas required exceeds allowance (0)`, and on 2026-09-17 `insufficient funds for gas * price + value: …`) | the class has its own sentence and its own classification — **but see the limit below: the stub cannot make the page report it** |
 >
-> **How it was measured, and the counts.**
+> **A CLAIM MADE AND THEN WITHDRAWN, RECORDED BECAUSE THE WITHDRAWAL IS THE FINDING.** The first run
+> of the empty-`eth_accounts` scenario on the published page rendered a **stale address with a write
+> control**, and that was written up as a third defect. Four further runs, and a probe that asked the
+> page's own providers directly, showed what it actually was: **the stub loses `window.ethereum` to
+> the user's real MetaMask extension on the published origin**, so the wallet answering `[]` is not
+> the wallet wagmi reconnected from — the page was describing the REAL, connected extension, and the
+> empty answer never reached the app. The instrument was measuring the wrong wallet, which is the same
+> class of error this file keeps recording on the other side (a check that passes for a reason it was
+> not written for). **So no third defect is claimed**: the scenario is kept as a **guard** on an
+> invariant, and the code change it produced is defensive (see below) rather than a repair of an
+> observed failure.
 >
-> | Run — `tools/wallet-double-assert.mjs`, 47 assertions | Result |
+> **The structural risk the guard covers, stated as a risk rather than as a measurement.**
+> `getConnection()` takes `address` from the connection wagmi **restored from its own persisted
+> store**, so a wallet that has since stopped offering an account can leave a good-looking address
+> there; the first version of this fix tested `connection.address === undefined` and could not fire on
+> that shape at all, because the address is never undefined — it was reconstructed, not read. The
+> change that followed is the same move `walletChainNow` already makes for the chain: the page asks
+> the wallet (`eth_accounts`, which never prompts) and renders no address unless the answer confirms
+> one. **It could not be reproduced in this environment** — the local origin renders the no-wallet
+> state correctly, and the published origin lets the real extension win — so it is recorded as
+> defence against a state wagmi's own store permits, not as a defect that was caught in the act.
+>
+> **How it was measured, and the counts — split by what each number is evidence OF.**
+>
+> | Run — `tools/wallet-double-assert.mjs`, now **47 assertions** (it was 21) | Result |
 > |---|---|
-> | **the published page, before any fix** (the code a reader had) | **38 passed / 9 failed of 47** — the 8 assertions of scenarios A, B, C1 and C2 all pass (they are the fourth amendment's), and all 9 failures are new: 3 in scenario D, 4 in scenario E, 1 each in F1 and F2 |
-> | **a local export with ONLY the source fix stashed** (the fix's own modules moved aside, everything else in place) | **42 passed / 5 failed of 47** — D's 3 and F1/F2's 2. **Scenario E passes on the old code locally**, and the reason is measured: see below |
+> | **the published page, before any fix** (the code a reader had) | **38 passed / 9 failed of 47.** The 21 assertions of scenarios A, B, C1 and C2 all pass — those are the fourth amendment's, unchanged — and all 9 failures are in the new scenarios: 3 in D, 4 in E, 1 each in F1 and F2 |
+> | **a local export with ONLY the source fix stashed** (the fix's modules moved aside, everything else in place) | **42 passed / 5 failed of 47** — D's 3, F1's 1, F2's 1. **The 1 local proof for the amendment's own claims** |
 > | **a local export of the fixed sources** | **47 passed / 0 failed of 47**, exit 0 |
-> | **the PUBLISHED site after the deploy** | **47 passed / 0 failed of 47**, exit 0 |
+> | **the PUBLISHED site after the first deploy** (`d283f98`) | **43 passed / 4 failed of 47** — every scenario but E passes, and E's 4 failures are the artifact above. The run that follows the second deploy is the one of record for the final count |
+>
+> **The 26 net new assertions, sorted by what they are worth** — because "47 assertions" is a poor
+> summary of a number that mixes three kinds of thing:
+>
+> - **5 are true regression tests** (3 in D, 1 in F1, 1 in F2): they fail on the code before the fix
+>   from a local build with only the source fix stashed, and pass on it. Those are the ones that
+>   prove the fix.
+> - **6 are guards** (all of E): they assert an invariant that both the old and the new code satisfy
+>   on a fresh origin, so they cannot prove a fix — they can only fail if the invariant is broken
+>   later. Recorded as guards rather than counted as evidence.
+> - **15 are coverage** (4 in D, 1 in E, 5 in F1, 5 in F2): they make an existing behaviour's
+>   precondition explicit — that the wallet was actually asked, that no send was attempted, that both
+>   chains are still named, that the app offered the chain the wallet did not know. They pass on the
+>   old code and would fail if the behaviour regressed.
 >
 > Evidence: `verification/out/wallet-double-assert-NEW-ASSERTIONS-OLD-CODE-live.txt`,
 > `verification/out/wallet-double-assert-NEW-ASSERTIONS-OLD-CODE-local-stash.txt`,
 > `verification/out/wallet-double-assert-FIXED-local-2026-09-19.txt`,
-> `verification/out/wallet-double-assert-LIVE-2026-09-19.txt`. The error shapes the classifier is
-> asserted against are not invented either: they are what viem 2.56.5 actually builds, captured by
-> driving viem's own `writeContract` against a refusing transport
+> `verification/out/wallet-double-assert-LIVE-2026-09-19.txt`,
+> `verification/out/wallet-double-assert-E-OLD-CODE-live-2026-09-19.txt` (the artifact's own record).
+> The error shapes the classifier is asserted against are not invented either: they are what viem
+> 2.56.5 actually builds, captured by driving viem's own `writeContract` against a refusing transport
 > (`tools/_probe-viem-shapes.mjs` → `verification/out/viem-error-shapes-2.56.5.txt`), and
 > `test/wallet-errors.test.ts` (17 tests) builds those same shapes by hand.
 >
-> **WHERE THE PAGE'S NO-ACCOUNT BRANCH WAS MEASURED, AND WHY THE LOCAL RUN DOES NOT REPRODUCE IT.**
-> On the published console the empty-`eth_accounts` scenario rendered a stale address and offered a
-> write; on a **fresh local origin** the same stub leaves the page rendering its no-wallet state with
-> a connect control, which is correct. The difference is the environment, not the code: the published
-> run is inside the user's real browser, where a **real extension is installed beside the stub and a
-> connection is already persisted for that origin**. Three local conditions were tried to reproduce
-> it — a fresh origin, `localStorage` cleared, and a hand-seeded `wagmi.store` carrying a connection —
-> and all three rendered the no-wallet state. So scenario E is a **regression guard on the invariant**
-> (no address, no write control, and the state said out loud) rather than a local reproduction, and
-> the reproduction of record is the published run, where all four of its assertions fail. That is the
-> same treatment this file gives every other measurement whose target produced it.
+> **WHERE THE PAGE'S NO-ACCOUNT BRANCH WAS MEASURED, AND WHY NO RUN REPRODUCES IT.** On the published
+> console the empty-`eth_accounts` scenario rendered a stale address and offered a write — and that
+> was a **probe artifact, not a defect**: the stub loses `window.ethereum` to the user's real MetaMask
+> extension on that origin, so the address on screen belonged to the real, connected extension and the
+> empty answer never reached the app. The measurement is repeatable in the negative too: **four further
+> runs on the published site all rendered the address**, and a probe that asked `window.ethereum`
+> directly got `[]` from the stub while wagmi's connection held the extension's two accounts. So the
+> scenario cannot be measured on a page where a real extension is installed, and it is carried as a
+> **guard on an invariant** (no address, no write control, and the state said out loud) rather than as
+> a reproduction. Three local conditions were tried as an alternative — a fresh origin, `localStorage`
+> cleared, and a hand-seeded `wagmi.store` carrying a connection — and all three rendered the
+> no-wallet state, because on a fresh origin there is no extension to lose the race to. The code the
+> scenario produced is recorded as **defensive**: `getConnection()` takes `address` from the
+> connection wagmi restored from its own persisted store, so the shape it guards against is one
+> wagmi's store permits, and the guard is the same move `walletChainNow` already makes for the chain.
+> **It is not claimed that this state was caught in the act.**
 >
 > **WHAT THE EXTENSION CANNOT DO, MEASURED RATHER THAN ASSUMED — the limit that keeps rows 6 and 7
 > open.** A gas refusal and a revert both reach the page through viem's own fill/estimate chain, and
@@ -701,11 +754,15 @@ the console column means "the console errors and uncaught exceptions this page p
 > 3. approve + deposit for real — a funded key, a signature, and a chain that accepts it;
 > 4. reject with the extension window in the foreground — the prompt itself, on screen beside the page.
 >
-> **What this amendment does not claim.** It does not move any row to `passed`, and it does not
-> change §8's verdict, which is still **not passed**. The defects it found were found by a tool
-> written after the two a person found, and it still cannot produce the prompt, the signature or the
-> chain. What it adds is that the page's answers to the failure classes a wallet can produce on its
-> own are now measured, worded in one place, and asserted by a tool that fails when they regress.
+> **What this amendment does not claim.** It does not move any row to `passed`, and it does not change
+> §8's verdict, which is still **not passed**. It found **two** defects, not three: the third candidate
+> was withdrawn when the probe turned out to be measuring the wrong wallet, and the withdrawal is
+> written above rather than quietly dropped. The tool that found the two was written after the two a
+> person found, and it still cannot produce the prompt, the signature or the chain — nor a gas
+> refusal or a revert, for the measured reason given above. What it adds is that the page's answers to
+> the failure classes a wallet can produce **on its own** are now classified in one place, worded
+> against what the error actually is, and asserted by a tool that fails when they regress — 5 of its
+> assertions fail on the code before the fix.
 
 | # | Failure class | How it is injected | What is asserted (wording + rendered result + state) | Evidence requirement | Status |
 |---|---|---|---|---|---|
