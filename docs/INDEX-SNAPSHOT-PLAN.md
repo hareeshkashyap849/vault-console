@@ -1,5 +1,12 @@
 # Plan: give the published `/history` page real data, without a hosted service
 
+> **These repositories moved on 2026-09-19, and the URLs below were not rewritten.** They lived at
+> `hareeshkashyap849` and now live at `wuzilin-web3`; the old *repository* URLs still redirect, but
+> GitHub Pages does not redirect, so the two published sites now answer at
+> <https://wuzilin-web3.github.io/vault-console/> and <https://wuzilin-web3.github.io/erc4626-vault/>.
+> Every `hareeshkashyap849` URL in this file is the address a measurement was taken at, and it is left
+> as written because rewriting it would make the record say something that was never true.
+
 **Status: steps 1-3 IMPLEMENTED and step 4 VERIFIED LOCALLY; step 5 (publish and check the live
 URL) NOT DONE.** Written 2026-09-17, after the static export was published and the page was found
 to be the one hole in it. Implemented the same day; the section "What was built, and what was

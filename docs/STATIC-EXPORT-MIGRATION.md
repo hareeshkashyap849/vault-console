@@ -1,7 +1,14 @@
 # The console moved from server components to a static export
 
+> **These repositories moved on 2026-09-19, and the URLs below were not rewritten.** They lived at
+> `hareeshkashyap849` and now live at `wuzilin-web3`; the old *repository* URLs still redirect, but
+> GitHub Pages does not redirect, so the two published sites now answer at
+> <https://wuzilin-web3.github.io/vault-console/> and <https://wuzilin-web3.github.io/erc4626-vault/>.
+> Every `hareeshkashyap849` URL in this file is the address a measurement was taken at, and it is left
+> as written because rewriting it would make the record say something that was never true.
+
 **Date:** 2026-09-17 · **Commit:** `248cd46` (export), `3344e0b` (publishing) ·
-**Live:** <https://hareeshkashyap849.github.io/vault-console/>
+**Live:** <https://wuzilin-web3.github.io/vault-console/> — moved from `hareeshkashyap849` on 2026-09-19; the repository URL redirects, the Pages URL does not, so this line names the address that answers now
 
 This file exists because the change invalidated statements in eight documents, and the
 workspace's rule for stale content is to record **which line is stale, what the correct

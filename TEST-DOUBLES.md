@@ -1,5 +1,12 @@
 # Test-double inventory (path B · F2) — vault-console
 
+> **These repositories moved on 2026-09-19, and the URLs below were not rewritten.** They lived at
+> `hareeshkashyap849` and now live at `wuzilin-web3`; the old *repository* URLs still redirect, but
+> GitHub Pages does not redirect, so the two published sites now answer at
+> <https://wuzilin-web3.github.io/vault-console/> and <https://wuzilin-web3.github.io/erc4626-vault/>.
+> Every `hareeshkashyap849` URL in this file is the address a measurement was taken at, and it is left
+> as written because rewriting it would make the record say something that was never true.
+
 > **The third of the F2 deliverables.** Gate G-F2 requires all three to be present; this file is
 > the third. Definitions: the workspace's frontend correctness guideline, §2.3 (its section on the
 > structural failure modes); basis: the delivery blueprint, §12.2 (its frontend path, F1-F5).

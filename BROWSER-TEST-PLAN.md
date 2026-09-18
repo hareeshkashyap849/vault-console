@@ -1,5 +1,12 @@
 # Browser test plan (path B · F4) — vault-console
 
+> **These repositories moved on 2026-09-19, and the URLs below were not rewritten.** They lived at
+> `hareeshkashyap849` and now live at `wuzilin-web3`; the old *repository* URLs still redirect, but
+> GitHub Pages does not redirect, so the two published sites now answer at
+> <https://wuzilin-web3.github.io/vault-console/> and <https://wuzilin-web3.github.io/erc4626-vault/>.
+> Every `hareeshkashyap849` URL in this file is the address a measurement was taken at, and it is left
+> as written because rewriting it would make the record say something that was never true.
+
 > **F4 deliverable. Gate G-F4: everything passes in a real browser; the evidence includes a screenshot + console errors + a transaction hash.**
 > Basis: the delivery blueprint, §12.2 and §12.5 (path B's four layers);
 > methodology: the workspace's frontend correctness guideline, sections 3 and 4 (structure).
