@@ -684,13 +684,23 @@ the console column means "the console errors and uncaught exceptions this page p
 > | **a local export of the fixed sources**, current assertion set | **40 passed / 0 failed of 40**, exit 0; and with E opted in, **8 passed / 0 failed of 8**, exit 0 |
 > | **the PUBLISHED site after the second deploy** (`ba67b03`) and again on `43d0891` | **40 passed / 0 failed of 40, 0 skipped, exit 0** |
 >
-> **And the tool of record, re-run on the head that carries this amendment (`43d0891`, whose Pages run
-> `35298836554` succeeded):** `browser-assert.mjs` → **58 passed / 0 failed / 0 skipped, of 58
-> assertions, exit 0** — the same 58 this file recorded before the change, so nothing else moved —
-> and `wallet-double-assert.mjs` → **40 passed / 0 failed of 40, exit 0** with scenario E printed as
-> SKIPPED.
-> Evidence: `verification/out/browser-assert-against-export-2026-09-19-43d0891.txt`,
+> **And the tool of record, re-run on the head that carries this amendment (`43d0891`/`9182c4d`, whose
+> Pages runs `35298836554` and `35299194813` succeeded):** `browser-assert.mjs` → **58 passed / 0
+> failed / 0 skipped, of 58 assertions, exit 0** — the same 58 this file recorded before the change, so
+> nothing else moved — and `wallet-double-assert.mjs` → **40 passed / 0 failed of 40, exit 0** with
+> scenario E printed as SKIPPED.
+> Evidence: `verification/out/browser-assert-against-export-2026-09-19-9182c4d.txt`,
 > `verification/out/wallet-double-assert-LIVE-2026-09-19.txt`.
+>
+> **One flake worth naming, because a reader who hits it will think the page broke.** The first
+> repeated run of `browser-assert.mjs` on the same head scored **55 passed / 2 failed / 1 skipped of
+> 57**, with both failures in the two cross-checks that read the chain, and both reporting
+> `https://sepolia.base.org could not be reached: SyntaxError: Unexpected token '<', "<!DOCTYPE "…
+> is not valid JSON`. That is the workspace's **SOCKS proxy** returning an HTML error page: it is the
+> transport the cross-check travels over, not the page's own request, and the page's own figures were
+> unaffected. The re-run is **58/58** with no change to the code, which is what makes "transient
+> transport" the right reading rather than "a console regression". It is recorded here because this
+> file's rule is that an unexplained red is worth more than a green that hides one.
 >
 > **The 19 net new assertions, sorted by what they are worth** — because "40 assertions" is a poor
 > summary of a number that mixes three kinds of thing:
