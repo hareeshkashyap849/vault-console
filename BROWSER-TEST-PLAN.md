@@ -670,6 +670,14 @@ the console column means "the console errors and uncaught exceptions this page p
 > | **a local export of the fixed sources** | **40 passed / 0 failed of 40**, exit 0; and with E opted in, **8 passed / 0 failed of 8**, exit 0 |
 > | **the PUBLISHED site after the second deploy** (`ba67b03`) | **40 passed / 0 failed of 40, 0 skipped, exit 0** |
 >
+> **And the tool of record, re-run on the head that carries this amendment (`0760191`, whose Pages run
+> `35298072426` succeeded):** `browser-assert.mjs` → **58 passed / 0 failed / 0 skipped, of 58
+> assertions, exit 0** — the same 58 this file recorded before the change, so nothing else moved —
+> and `wallet-double-assert.mjs` → **40 passed / 0 failed of 40, exit 0** with scenario E printed as
+> SKIPPED.
+> Evidence: `verification/out/browser-assert-against-export-2026-09-19-0760191.txt`,
+> `verification/out/wallet-double-assert-LIVE-2026-09-19.txt`.
+>
 > **The 19 net new assertions, sorted by what they are worth** — because "40 assertions" is a poor
 > summary of a number that mixes three kinds of thing:
 >
