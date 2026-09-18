@@ -675,27 +675,37 @@ if (selected('D')) {
   }
 }
 
-// ---- 4c. SCENARIO E: the wallet reports no account at all --------------------------------------
+// ---- 4c. SCENARIO E: the wallet reports no account at all -- OPT-IN, AND WHY -------------------
 //
 // `eth_accounts` answering with an empty array is what a locked wallet, or one whose connection was
-// revoked, does.
+// revoked, does. The scenario asserts one invariant: WITHOUT the wallet confirming an account, no
+// address is rendered, no write control is offered, and the state is said out loud.
 //
-// MEASURED ON THE PUBLISHED SITE, this was a defect: the page rendered the address, a balance read
-// for it, and `1. Approve USDC` -- and the click left the control reading `Waiting for the wallet…`
-// for ever, with no notice, because `eth_sendTransaction` on a wallet holding no account can only
-// fail. The page was describing a wallet that was not there.
+// IT IS OPT-IN (`--only E`) BECAUSE ON A REAL BROWSER IT CANNOT BE MEASURED, AND A TEST THAT FAILS
+// FOR ITS OWN REASONS IS WORSE THAN NO TEST. Measured, four runs out of four, against the published
+// site: **the stub loses `window.ethereum` to the user's real MetaMask extension on that origin**, so
+// wagmi reconnects from the extension and the page renders the extension's real, connected account
+// with a real write control. Every assertion below then fails -- correctly, about a page that is
+// right, because the wallet the stub is pretending to be is not the wallet the page is talking to.
+// Left in the default run it would be a permanent red that trains a reader to ignore the summary,
+// which is the failure mode this repository has already paid for once.
 //
-// MEASURED WITH THIS STUB ON A FRESH ORIGIN, the page does NOT reach that state: wagmi's connector
-// takes the permission rejection, the store ends up `connections: []`, and the page renders its
-// no-wallet state with a connect control -- which is correct, and which is why the assertions below
-// pass on the code before the fix too, locally. What reproduced the defect is the published site's
-// environment: a real extension installed beside the stub with a connection already persisted for
-// that origin. So this scenario is a REGRESSION GUARD for the invariant ("no address, no write
-// control, and the state said out loud"), not a local reproduction of the published failure -- and
-// the reproduction of record is `verification/out/wallet-double-assert-NEW-ASSERTIONS-OLD-CODE-live.txt`,
-// where these same assertions fail against the live page. `TEST-DOUBLES.md` §3 states the limit.
+// So it runs where it can mean something: on a fresh origin, where there is no extension to lose the
+// race to and the page's own state is what is being measured. There it PASSES on both the code before
+// the fix and the code after -- which is why it is recorded in `TEST-DOUBLES.md` §3 as a GUARD that
+// supports no claim, not as a regression test.
 
-if (selected('E')) {
+/**
+ * OPT-IN, AND THE FLAG IS THE DOCUMENTATION: `--only E` is the only way this scenario runs. On the
+ * default run it is skipped, and the skip is printed rather than silent.
+ *
+ * `only === null` means "no `--only` was given", and for THIS scenario that is not "run everything":
+ * the default run must stay green on a real browser, or the summary stops meaning anything.
+ */
+const eSelected = only !== null && only.has('E');
+if (!eSelected) {
+  console.log('\n--- E. the wallet reports no account -- SKIPPED (opt-in: `--only E`, on an origin with no wallet extension) ---');
+} else {
   console.log('\n--- E. the wallet reports no account ---');
   const e = await loadWith(APP_CHAIN, 'no-accounts');
   check('E: the stub is live and answers `eth_accounts` with an empty array',
