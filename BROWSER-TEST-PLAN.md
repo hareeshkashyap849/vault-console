@@ -611,15 +611,28 @@ the console column means "the console errors and uncaught exceptions this page p
 >   wallet_addEthereumChain first.`) and again with `4001` (the reader declining the switch): the
 >   rendered text was identical in both runs and identical to the pre-click text.
 >
-> **A third finding was written up and then withdrawn, and the withdrawal is part of the record.**
-> The empty-`eth_accounts` scenario rendered a stale address with a write control on the published
-> page, and that was first recorded as a third defect. Four further runs and a probe of the page's
-> own providers showed the cause: **the stub loses `window.ethereum` to the real MetaMask extension on
-> the published origin**, so the wallet answering `[]` was not the wallet wagmi reconnected from —
-> the address on screen belonged to the real, connected extension, and the empty answer never reached
-> the app. The instrument was measuring the wrong wallet. That finding is now carried as a
-> **guard** on an invariant rather than as evidence of a defect, and the code it produced is recorded
-> as **defensive** in the class table above.
+> **A third finding was written up and then withdrawn — and the code it produced was withdrawn with
+> it, which is the more useful half of the record.**
+>
+> The empty-`eth_accounts` scenario rendered a **stale address with a write control** on the published
+> page, and that was first recorded as a third defect. Four further runs and a probe of the page's own
+> providers showed the cause: **the stub loses `window.ethereum` to the real MetaMask extension on the
+> published origin**, so the wallet answering `[]` was not the wallet wagmi had reconnected from — the
+> address on screen belonged to the real, connected extension. The instrument was measuring the wrong
+> wallet. **So no third defect is claimed**, and the scenario is carried as a **guard** on an invariant
+> rather than as evidence — kept out of the default run (`--only E`), because a scenario that fails for
+> its own reasons trains a reader to ignore the summary.
+>
+> **The code that followed the withdrawn finding was withdrawn too, and the A/B is why.** A version of
+> `VaultManager` asked the wallet `eth_accounts` directly and rendered no address it could not confirm
+> — a reasonable guard against `getConnection()` taking `address` from wagmi's **persisted store**
+> rather than from the wallet. It was removed after an A/B on a fresh origin: **with that change
+> reverted and everything else in place, the no-account scenario passed every one of its assertions
+> identically**, because wagmi's own reconnect already clears the connection when the wallet answers
+> with no accounts. Code that no measurement asks for is code that no measurement defends, and adding
+> it would have been a change reported as a fix on the strength of a measurement that turned out to be
+> about the wrong wallet. What remains is the notice the page already renders
+> (`WalletStateNotice`, `accountMissing`) plus the guard that asserts the invariant.
 >
 > **What the page had no copy for, class by class, before and after.** Each row is a class the wallet
 > can produce; "before" is what the published page rendered under the stub, "after" is what it
@@ -631,31 +644,32 @@ the console column means "the console errors and uncaught exceptions this page p
 > | `4001` declined chain switch | the pre-click refusal, unchanged — **nothing about the attempt** | `The chain switch was cancelled in the wallet, so the wallet is still not on chain 84532 (Base Sepolia). Nothing is sent until it is.` |
 > | `4902` chain the wallet does not know | the pre-click refusal, unchanged — **nothing about the attempt** | the same switch sentence, plus (measured) the app **offering the chain** via `wallet_addEthereumChain`, which is what the wallet's own sentence asks for. **The `4902` itself is not recoverable at this layer**, and that is measured: wagmi's `switchChain` folds the switch failure into the add attempt, so the error that reaches the app is the ADD's `4001`. Every refusal on this path therefore renders the same true sentence, and none of them claims which prompt was declined |
 > | `4900` mid-flight disconnect | `The transaction failed(approve)` / `The Provider is disconnected from all chains.` | `The wallet disconnected while this request was in flight, so nothing was signed and nothing was sent. Reconnect it to chain 84532 (Base Sepolia) and ask again.` — with the provider's words kept in the disclosure |
-> | `eth_accounts → []` (no account) | **not reachable by this instrument on the published site, measured four times out of four** — see below | a defensive branch: without the wallet's confirmation no address is rendered, and the state is said out loud |
+> | `eth_accounts → []` (no account) | **not reachable by this instrument on the published site, measured four times out of four** — see below | **no change**, and none is claimed: the page already refuses to render a write for an account it has not read, and the scenario is a guard on that invariant |
 > | insufficient funds for gas (§5 row 6) | **no class at all**: the app printed the chain's own text (`gas required exceeds allowance (0)`, and on 2026-09-17 `insufficient funds for gas * price + value: …`) | the class has its own sentence and its own classification — **but see the limit below: the stub cannot make the page report it** |
 >
-> **A CLAIM MADE AND THEN WITHDRAWN, RECORDED BECAUSE THE WITHDRAWAL IS THE FINDING.** The first run
-> of the empty-`eth_accounts` scenario on the published page rendered a **stale address with a write
-> control**, and that was written up as a third defect. Four further runs, and a probe that asked the
-> page's own providers directly, showed what it actually was: **the stub loses `window.ethereum` to
-> the user's real MetaMask extension on the published origin**, so the wallet answering `[]` is not
-> the wallet wagmi reconnected from — the page was describing the REAL, connected extension, and the
-> empty answer never reached the app. The instrument was measuring the wrong wallet, which is the same
-> class of error this file keeps recording on the other side (a check that passes for a reason it was
-> not written for). **So no third defect is claimed**: the scenario is kept as a **guard** on an
-> invariant, and the code change it produced is defensive (see below) rather than a repair of an
-> observed failure.
+> **A CLAIM MADE AND THEN WITHDRAWN, RECORDED BECAUSE THE WITHDRAWAL IS THE FINDING — AND THE CODE
+> WAS WITHDRAWN WITH IT.** The first run of the empty-`eth_accounts` scenario on the published page
+> rendered a **stale address with a write control**, and that was written up as a third defect. Four
+> further runs, and a probe that asked the page's own providers directly, showed what it actually was:
+> **the stub loses `window.ethereum` to the user's real MetaMask extension on the published origin**,
+> so the wallet answering `[]` is not the wallet wagmi reconnected from — the address on screen
+> belonged to the REAL, connected extension, and the empty answer never reached the app. The
+> instrument was measuring the wrong wallet, which is the same class of error this file keeps
+> recording on the other side (a check that passes for a reason it was not written for). **So no
+> third defect is claimed**, and the scenario is kept as a **guard** on an invariant.
 >
-> **The structural risk the guard covers, stated as a risk rather than as a measurement.**
-> `getConnection()` takes `address` from the connection wagmi **restored from its own persisted
-> store**, so a wallet that has since stopped offering an account can leave a good-looking address
-> there; the first version of this fix tested `connection.address === undefined` and could not fire on
-> that shape at all, because the address is never undefined — it was reconstructed, not read. The
-> change that followed is the same move `walletChainNow` already makes for the chain: the page asks
-> the wallet (`eth_accounts`, which never prompts) and renders no address unless the answer confirms
-> one. **It could not be reproduced in this environment** — the local origin renders the no-wallet
-> state correctly, and the published origin lets the real extension win — so it is recorded as
-> defence against a state wagmi's own store permits, not as a defect that was caught in the act.
+> **The code that followed that finding was removed again, and the A/B is the reason.** A version of
+> `VaultManager` asked the wallet `eth_accounts` directly (`walletAccountsNow`) and rendered no
+> address it could not confirm — a plausible guard, since `getConnection()` takes `address` from the
+> connection wagmi **restored from its own persisted store** rather than from the wallet. On a fresh
+> origin, **with that change reverted and everything else in place, the no-account scenario passed
+> every one of its assertions identically**: wagmi's own reconnect already clears the connection when
+> the wallet answers with no accounts. The published origin behaves differently, and it cannot be used
+> to attribute the difference, because there the instrument is reading another wallet. **Code that no
+> measurement asks for is code that no measurement defends**, and shipping it would have meant
+> reporting a change as a fix on the strength of a measurement about the wrong wallet — which is the
+> failure this whole amendment is a record of. What stays is the notice the page already renders plus
+> the guard that asserts the invariant.
 >
 > **How it was measured, and the counts — split by what each number is evidence OF.**
 >
@@ -715,11 +729,11 @@ the console column means "the console errors and uncaught exceptions this page p
 > **guard on an invariant** (no address, no write control, and the state said out loud) rather than as
 > a reproduction. Three local conditions were tried as an alternative — a fresh origin, `localStorage`
 > cleared, and a hand-seeded `wagmi.store` carrying a connection — and all three rendered the
-> no-wallet state, because on a fresh origin there is no extension to lose the race to. The code the
-> scenario produced is recorded as **defensive**: `getConnection()` takes `address` from the
-> connection wagmi restored from its own persisted store, so the shape it guards against is one
-> wagmi's store permits, and the guard is the same move `walletChainNow` already makes for the chain.
-> **It is not claimed that this state was caught in the act.**
+> no-wallet state, because on a fresh origin there is no extension to lose the race to. **No code
+> change accompanies the guard**: the one that was written for it (`walletAccountsNow`) was reverted
+> after an A/B showed the guard passes without it, and the withdrawal is recorded above. **It is not
+> claimed that this state was caught in the act, and it is not claimed that anything was fixed for
+> it.**
 >
 > **WHAT THE EXTENSION CANNOT DO, MEASURED RATHER THAN ASSUMED — the limit that keeps rows 6 and 7
 > open.** A gas refusal and a revert both reach the page through viem's own fill/estimate chain, and

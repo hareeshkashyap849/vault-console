@@ -18,7 +18,7 @@ import { RedeemForm } from '@/components/RedeemForm';
 import { figure } from '@/lib/vaultActions';
 import { shortenAddress } from '@/lib/format';
 import { ERC20_ABI, VAULT_ABI } from '@/lib/chain';
-import { addChainParameterFor, walletAccountsNow } from '@/lib/wagmi';
+import { addChainParameterFor } from '@/lib/wagmi';
 import { classifyWalletError } from '@/lib/walletError';
 import { chainSwitchFailureText } from '@/lib/walletFailureCopy';
 
@@ -132,46 +132,28 @@ export function VaultManager({
   // reads, and `useChainId()` is not it -- that one is the app's chain and cannot see a wallet on a
   // chain this app has no deployment for.
   const walletChainId = connection.chainId ?? null;
+  const account = connection.isConnected ? connection.address : undefined;
   /**
-   * WHICH ACCOUNT THE PAGE MAY RENDER, WHICH IS NOT THE SAME AS THE ONE WAGMI REMEMBERS.
+   * CONNECTED, AND NO ACCOUNT TO SHOW -- which is `isConnected: true` with `address: undefined`,
+   * because `getConnection()` takes `address` from `connection.accounts[0]`; and the same notice
+   * covers a connector that is still reconnecting, where the address is not yet confirmed either.
    *
-   * `getConnection()` takes `address` from the connection wagmi RESTORED from its own persisted
-   * store, so a wallet that has since stopped offering an account still leaves a good-looking
-   * address there. Measured on the published console: with `eth_accounts` answering `[]`, the page
-   * rendered `Address 0x2aE7…E034`, a balance read for that account, `Wallet chain 84532 / matches
-   * the deployment`, and offered `1. Approve USDC` -- a control that could only fail, whose click
-   * then left the button reading `Waiting for the wallet…` for ever. **A first version of this fix
-   * read `connection.address === undefined` and could not fire on that page at all**, because the
-   * address was never undefined: it had been reconstructed, not read from the wallet.
+   * WHY THERE IS NO ATTEMPT TO ALSO ASK THE WALLET `eth_accounts` HERE, AND WHAT WAS TRIED.
    *
-   * So the wallet is ASKED (`walletAccountsNow` in `src/lib/wagmi.ts`, `eth_accounts`, which never
-   * prompts) and its answer decides. `null` means the wallet did not answer, and then wagmi's value
-   * stands -- nothing has been shown to be wrong. An EMPTY ARRAY means it is offering nothing, and
-   * the connection's stored address is not rendered at all. `walletAccountMissing` is that case, and
-   * it also covers a connector that is still reconnecting -- an address not confirmed by the wallet
-   * now is exactly the thing this exists to stop presenting as fact.
+   * `address` comes from the connection wagmi RESTORED from its own persisted store, so a wallet
+   * that has since stopped offering an account can in principle leave a good-looking address there.
+   * A version of this file did ask the wallet directly (`walletAccountsNow`, one `eth_accounts` per
+   * mount plus one per connection change) and refused to render an address it could not confirm. It
+   * was removed, and the reason is a measurement rather than a preference: an A/B on a fresh origin —
+   * that change reverted, everything else in place — **passed every assertion of the no-account
+   * scenario identically**, because wagmi's own reconnect already clears the connection when the
+   * wallet answers with no accounts. The published origin behaves differently, but it cannot be used
+   * to attribute the difference: there the stub provider loses `window.ethereum` to the reader's real
+   * MetaMask extension, so whatever the page is reading is not the wallet the stub is pretending to
+   * be (`tools/wallet-double-assert.mjs` scenario E, and `BROWSER-TEST-PLAN.md` §5's fifth
+   * amendment). Code that no measurement asks for is code that no measurement defends, so what stays
+   * is the notice below, and the invariant is asserted rather than the mechanism.
    */
-  const connectorRef = connection.connector;
-  const [liveAccounts, setLiveAccounts] = useState<string[] | null>(null);
-  useEffect(() => {
-    if (connectorRef === undefined) {
-      setLiveAccounts(null);
-      return;
-    }
-    let cancelled = false;
-    void walletAccountsNow(connectorRef)
-      .then((accounts) => {
-        if (!cancelled) setLiveAccounts(accounts);
-      })
-      .catch(() => {
-        if (!cancelled) setLiveAccounts(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [connectorRef, connection.address, connection.status]);
-  const walletOffersNoAccount = liveAccounts !== null && liveAccounts.length === 0;
-  const account = walletOffersNoAccount || !connection.isConnected ? undefined : connection.address;
   const walletAccountMissing = account === undefined && (connection.isConnected || connection.status === 'reconnecting');
   const isWrongChain = account !== undefined && walletChainId !== chainId;
 

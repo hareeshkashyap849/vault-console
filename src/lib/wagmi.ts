@@ -1,4 +1,4 @@
-import { defineChain, type Chain } from 'viem';
+﻿import { defineChain, type Chain } from 'viem';
 import { createConfig, http, injected, type Config, type Connector } from 'wagmi';
 
 import type { RuntimeConfig } from '@/lib/runtimeConfig';
@@ -102,52 +102,6 @@ export function createWagmiConfig(config: RuntimeConfig): Config {
 export async function walletChainNow(connector: Connector): Promise<number | null> {
   try {
     return await connector.getChainId();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * WHICH ACCOUNTS THE WALLET IS OFFERING **RIGHT NOW**, ASKED OF THE WALLET.
- *
- * WHY THIS IS NOT `connection.accounts`, AND WHAT IT COST TO LEARN
- *
- * `getConnection()` builds `address` from the connection wagmi RESTORED OUT OF ITS OWN STORE
- * (`config.state.connections`, persisted in `localStorage`). On a page that has been connected
- * before, that store is populated from the last session, and wagmi reconnects from it. So a wallet
- * that later reports NO accounts -- locked, or its connection to this site revoked -- still leaves a
- * perfectly good-looking address in the connection. Measured on the published console: with
- * `eth_accounts` answering `[]`, the page rendered `Address 0x2aE7…E034`, a balance read for that
- * account, `Wallet chain 84532 / matches the deployment`, and offered `1. Approve USDC` -- a control
- * that could only ever fail, whose click then left the button reading `Waiting for the wallet…` for
- * ever. The page was describing a wallet that was not there.
- *
- * A first version of this fix read `connection.address === undefined` and therefore could not fire
- * on that page at all: the address was never undefined. **The lesson is the same one
- * `walletChainNow` records about the chain** -- a value wagmi reconstructed is not the same fact as
- * the value the wallet is answering with now, and the write path is not the only place that matters.
- *
- * WHY THIS IS SAFE TO CALL, AND WHAT IT COSTS
- *
- * `eth_accounts` NEVER PROMPTS. EIP-1193 reserves prompting for `eth_requestAccounts`; asking which
- * accounts are already exposed is a question a wallet answers or refuses silently. It is called once
- * per mount, and again whenever the connection's account or status changes, so a wallet that comes
- * back is picked up without a reload.
- *
- * `null` MEANS "THE WALLET DID NOT ANSWER", AND IT IS NOT `[]`. The two are different facts and the
- * caller must not merge them: an unreadable wallet leaves wagmi's value in place (nothing has been
- * shown to be wrong), while an EMPTY ARRAY is a statement -- this wallet offers no account -- and
- * the connection's stored address must then not be rendered at all. A wallet on an older provider
- * that throws for this method lands in the same bucket as one that is silent, for the same reason.
- */
-export async function walletAccountsNow(connector: Connector): Promise<string[] | null> {
-  try {
-    const provider = await connector.getProvider();
-    const accounts = await (provider as { request: (args: { method: string }) => Promise<unknown> }).request({
-      method: 'eth_accounts',
-    });
-    if (!Array.isArray(accounts)) return null;
-    return accounts.filter((entry): entry is string => typeof entry === 'string');
   } catch {
     return null;
   }
