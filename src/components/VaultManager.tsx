@@ -19,6 +19,8 @@ import { figure } from '@/lib/vaultActions';
 import { shortenAddress } from '@/lib/format';
 import { ERC20_ABI, VAULT_ABI } from '@/lib/chain';
 import { addChainParameterFor } from '@/lib/wagmi';
+import { classifyWalletError } from '@/lib/walletError';
+import { chainSwitchFailureText } from '@/lib/walletFailureCopy';
 
 /**
  * The wallet page: connect, read your position, deposit, redeem.
@@ -102,11 +104,14 @@ interface AssetIdentity {
 
 export function VaultManager({
   chainId,
+  chainName,
   vault,
   asset,
 }: {
   /** The deployment's chain id from `api/config`, via the page's `useRuntimeConfig()`. */
   chainId: number;
+  /** The deployment's chain name from the same record. Used to name the chain in failure sentences. */
+  chainName: string;
   vault: `0x${string}`;
   asset: `0x${string}`;
 }) {
@@ -121,14 +126,38 @@ export function VaultManager({
   // Used when more than one injected provider is present: switching connections is a different
   // act from switching chains, and the two are labelled differently below.
   const { mutate: switchConnection } = useSwitchConnection();
-  const { mutate: switchChain, isPending: isSwitching } = useSwitchChain();
+  const { mutate: switchChain, isPending: isSwitching, error: switchChainError, reset: resetSwitchError } = useSwitchChain();
 
   // The wallet's chain, from the CONNECTION. See the header: this is the value the pre-flight check
   // reads, and `useChainId()` is not it -- that one is the app's chain and cannot see a wallet on a
   // chain this app has no deployment for.
   const walletChainId = connection.chainId ?? null;
   const account = connection.isConnected ? connection.address : undefined;
+  /**
+   * CONNECTED, AND NO ACCOUNT TO SHOW.
+   *
+   * `getConnection()` takes `address` from `connection.accounts[0]`, and `isConnected` from the
+   * config's status -- so a wallet that answers `eth_accounts` with an empty array produces
+   * `isConnected: true` with `address: undefined`, and a wallet that has not answered at all
+   * (`status: 'reconnecting'`) produces `isConnected: false` with `address: undefined`. Both are
+   * "the page cannot read this wallet's account", which is one fact with one notice, and neither is
+   * "no wallet is connected" -- which is what the page used to render, beside a connection control
+   * and a stale address.
+   */
+  const walletAccountMissing = account === undefined && (connection.isConnected || connection.status === 'reconnecting');
   const isWrongChain = account !== undefined && walletChainId !== chainId;
+
+  /**
+   * THE CHAIN SWITCH'S OWN FAILURE, RENDERED WHERE THE SWITCH IS.
+   *
+   * `useSwitchChain` was fired and its error went nowhere: measured with a stub wallet refusing
+   * `wallet_switchEthereumChain` with MetaMask's `4902` sentence, the page re-rendered the same
+   * "Switch the wallet to chain …" refusal and said nothing about the attempt, so a reader who
+   * clicked the control saw no change and no reason. The sentence comes from the failure taxonomy
+   * (`src/lib/walletFailureCopy.ts`), and a cancelled switch is said as a cancelled switch.
+   */
+  const chainWhere = { chainId, chainName };
+  const switchFailure = chainSwitchFailureText(switchChainError, chainWhere, classifyWalletError(switchChainError));
 
   /**
    * `useConnectors()` returns a readonly array whose element type is only `Connector` when the
@@ -172,6 +201,10 @@ export function VaultManager({
    * very chain the page is reading -- looks like a wallet bug.
    */
   function switchToAppChain() {
+    // Cleared first: a refusal from a moment ago must not sit under a switch the reader has just
+    // asked for again, for the same reason the write path clears its own refusal when the wallet
+    // comes back to the deployment's chain.
+    resetSwitchError();
     switchChain({
       chainId,
       // A wallet that has never seen this chain cannot switch to it, and the default failure is an
@@ -208,7 +241,11 @@ export function VaultManager({
               <dd className="figure text-lg text-slate-100" title={account ?? undefined}>
                 {account === undefined ? '—' : shortenAddress(account)}
               </dd>
-              {account === undefined ? <p className="text-xs text-slate-500">no wallet connected</p> : null}
+              {account === undefined ? (
+                <p className={`text-xs ${walletAccountMissing ? 'text-amber-400/90' : 'text-slate-500'}`}>
+                  {walletAccountMissing ? 'the wallet reports no account' : 'no wallet connected'}
+                </p>
+              ) : null}
             </div>
             <div className="flex flex-col gap-0.5">
               <dt className="text-xs text-slate-500">Wallet chain</dt>
@@ -217,7 +254,9 @@ export function VaultManager({
               </dd>
               <p className={`text-xs ${isWrongChain ? 'text-amber-400/90' : 'text-slate-500'}`}>
                 {account === undefined
-                  ? 'connect a wallet to read it'
+                  ? walletAccountMissing
+                    ? 'nothing can be read or signed for it until it reports one'
+                    : 'connect a wallet to read it'
                   : isWrongChain
                     ? `this app is deployed on chain ${chainId}`
                     : 'matches the deployment'}
@@ -278,6 +317,7 @@ export function VaultManager({
                     {isSwitching ? 'Switching…' : `Switch to chain ${chainId}`}
                   </button>
                 ) : null}
+
                 {connectors.length > 1 ? (
                   // Only when there is a choice. With one injected provider this control would
                   // be a button that can only do what is already done.
@@ -304,6 +344,18 @@ export function VaultManager({
               The wallet did not connect: {connectError.message}
             </p>
           ) : null}
+
+          {/*
+            THE SWITCH'S OWN FAILURE, beside the control that produced it.
+            A wrong chain and a REFUSED switch are different facts: the first is the state, the
+            second is an attempt that did not change it, and the second was previously not rendered
+            anywhere at all -- the page re-drew the same refusal and the reader saw no change.
+          */}
+          {switchFailure !== null ? (
+            <p className="mt-3 rounded-md border border-rose-800/60 bg-rose-950/30 p-3 text-xs text-rose-200">
+              {switchFailure}
+            </p>
+          ) : null}
         </Panel>
 
         <PositionPanel
@@ -316,9 +368,11 @@ export function VaultManager({
 
         <DepositForm
           chainId={chainId}
+          chainName={chainName}
           vault={vault}
           asset={asset}
           account={account}
+          walletAccountMissing={walletAccountMissing}
           walletChainId={account === undefined ? null : walletChainId}
           assetSymbol={symbol}
           assetDecimals={identity.decimals}
@@ -329,8 +383,10 @@ export function VaultManager({
 
         <RedeemForm
           chainId={chainId}
+          chainName={chainName}
           vault={vault}
           account={account}
+          walletAccountMissing={walletAccountMissing}
           walletChainId={account === undefined ? null : walletChainId}
           assetSymbol={symbol}
           assetDecimals={identity.decimals}

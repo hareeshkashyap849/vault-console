@@ -220,9 +220,16 @@ test('a viem-style wrapped error keeps the verbose text in detail, out of the he
 
   const state = mapWriteError('deposit', viemish, 'fallback');
   assert.equal(state.phase, 'failed');
-  assert.equal(state.message, 'execution reverted: ERC20InsufficientAllowance', 'the short line is the headline');
+  // The reason is ASSERTED AS PRESENT, not as the whole line, and the change is deliberate: the
+  // headline is now the failure CLASS's sentence with the reason after it, because a reader's next
+  // action depends on the class while the reason tells them which failure they are looking at.
+  // Pinned by `test/wallet-errors.test.ts`; what this test guards is unchanged -- the short line
+  // must reach the reader and the verbose report must not.
+  assert.match(state.message, /execution reverted: ERC20InsufficientAllowance/, 'the short line must reach the reader');
+  assert.match(state.message, /^The chain refused this call as written/, 'and the class sentence leads it');
   assert.ok(state.detail, 'the verbose report must be preserved for diagnosis');
   assert.notEqual(state.detail, state.message, 'the disclosure must not repeat the headline');
+  assert.match(state.detail ?? '', /Raw Call Arguments/, 'the diagnostic is behind the disclosure, not gone');
 });
 
 test('the fallback sentence is used when the error carries nothing readable', () => {

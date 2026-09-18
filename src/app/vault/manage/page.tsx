@@ -41,6 +41,10 @@ export default function ManagePage() {
       // one. The old check existed because the config listed chains independently of the record,
       // which is a way for the two to disagree.
       chainId={runtime.chainId}
+      // The chain's NAME, alongside its id. Every failure sentence names the chain, and the name is
+      // the half a reader recognises; it comes from the same record as the id so the two cannot
+      // describe different chains.
+      chainName={runtime.chainName}
       vault={runtime.vault}
       // The asset is an address from the record. Its symbol and decimals are read from the chain
       // by the client, because those belong to the contract rather than to the deployment.

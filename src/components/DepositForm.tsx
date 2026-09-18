@@ -12,6 +12,8 @@ import {
 import { AmountField, DecisionNote, Panel, ScopeNote, TxStatus, WalletStateNotice } from '@/components/WalletPanels';
 import { ERC20_ABI, VAULT_ABI } from '@/lib/chain';
 import { chainRefusalFor, decideDeposit, figure, maxAmountDecimal, type DepositDecision } from '@/lib/vaultActions';
+import { classifyWalletError } from '@/lib/walletError';
+import { walletFailureText } from '@/lib/walletFailureCopy';
 import { walletChainNow } from '@/lib/wagmi';
 import {
   describeWriteError,
@@ -24,10 +26,24 @@ import {
 } from '@/lib/txState';
 
 interface Props {
+  /** The deployment's chain id, from `api/config`. Every refusals names it, so it is passed, not read. */
   chainId: number;
+  /** The deployment's chain name, from `api/config`. Passed so every failure sentence can name it. */
+  chainName: string;
   vault: `0x${string}`;
   asset: `0x${string}`;
   account: `0x${string}` | undefined;
+  /**
+   * THE WALLET SAYS IT IS CONNECTED AND REPORTS NO ACCOUNT.
+   *
+   * Measured on the published console with a stub wallet answering `eth_accounts` with an empty
+   * array: `getConnection()` returns `isConnected: true` with `address: undefined` (wagmi reads
+   * `connection.accounts[0]`), and the page rendered a stale address, a balance read for it, and a
+   * write control — then answered a click with `Waiting for the wallet…` and stayed there for ever,
+   * because `eth_sendTransaction` on a wallet holding no account can only fail. This form's whole
+   * job is to not offer a write that cannot happen, so the state is named rather than papered over.
+   */
+  walletAccountMissing: boolean;
   /** The wallet's chain, or `null` when no wallet is connected. Not the app's chain. */
   walletChainId: number | null;
   assetSymbol: string;
@@ -36,6 +52,27 @@ interface Props {
   /** Offered on the wrong-chain path, and defined once in `VaultManager`. */
   onSwitchChain: () => void;
   isSwitching: boolean;
+}
+
+/**
+ * THE ERROR BOX, WITHOUT SAYING THE SAME THING TWICE.
+ *
+ * A classified failure already has a sentence, and that sentence is rendered by `TxStatus` from the
+ * transaction state itself. Rendering `describeWriteError` beside it printed the wallet's transport
+ * text directly under the taxonomy's sentence -- measured: the panel said the class's line and the
+ * box under it repeated `The Provider is disconnected from all chains.` A failure this app can name
+ * therefore gets its CLASS's sentence and nothing else; one it cannot name keeps the old behaviour,
+ * because for that case the error's own text is the only thing there is to show.
+ *
+ * A `4001` returns `null` already (the neutral box below the form states the cancellation), so the
+ * ordering here cannot turn a cancellation into a failure.
+ */
+function promptErrorFor(err: unknown, where: { chainId: number; chainName: string }): { message: string | null; detail: string | null } | null {
+  const kind = classifyWalletError(err);
+  const sentence = walletFailureText(kind, where);
+  if (sentence === null && kind !== 'unknown') return null;
+  if (sentence !== null) return { message: sentence, detail: null };
+  return describeWriteError(err);
 }
 
 /**
@@ -80,9 +117,11 @@ interface Props {
  */
 export function DepositForm({
   chainId,
+  chainName,
   vault,
   asset,
   account,
+  walletAccountMissing,
   walletChainId,
   assetSymbol,
   assetDecimals,
@@ -110,6 +149,15 @@ export function DepositForm({
    * `src/lib/wagmi.ts` for why the React value is not enough.
    */
   const { connector } = useConnection();
+
+  /**
+   * The two facts every failure sentence names, built once per render.
+   *
+   * A sentence that says "the account cannot pay the gas" without naming the chain is a sentence the
+   * reader cannot act on -- gas is a different coin on every chain -- and writing the pair at each
+   * call site is how one of them comes to name the wrong chain.
+   */
+  const chainWhere = { chainId, chainName };
 
   // Belt and braces: a null decimals would otherwise format an amount with a made-up one. Every
   // control below is disabled until the chain has answered.
@@ -300,16 +348,18 @@ export function DepositForm({
         {
           onSuccess: (hash) => setApproveTx(pendingState('approve', hash)),
           onError: (error) => {
-            // A `4001` returns the form to idle with a neutral note -- never the red path.
-            setApproveTx(mapWriteError('approve', error, 'The approval could not be sent.'));
-            setPromptError(describeWriteError(error));
+            // A `4001` returns the form to idle with a neutral note -- never the red path. Anything
+            // else is CLASSIFIED (`walletError.ts`) so the reader is told which failure it was and
+            // what to do, rather than being handed the wallet's transport text.
+            setApproveTx(mapWriteError('approve', error, 'The approval could not be sent.', chainWhere));
+            setPromptError(promptErrorFor(error, chainWhere));
           },
         },
       );
     } catch (cause) {
       // A synchronous throw -- no injected provider, for instance -- never reaches `onError`.
-      setApproveTx(mapWriteError('approve', cause, 'The approval could not be sent.'));
-      setPromptError(describeWriteError(cause));
+      setApproveTx(mapWriteError('approve', cause, 'The approval could not be sent.', chainWhere));
+      setPromptError(promptErrorFor(cause, chainWhere));
     }
   }
 
@@ -327,13 +377,13 @@ export function DepositForm({
       writeContract(request, {
         onSuccess: (hash) => setDepositTx(pendingState('deposit', hash)),
         onError: (error) => {
-          setDepositTx(mapWriteError('deposit', error, 'The deposit could not be sent.'));
-          setPromptError(describeWriteError(error));
+          setDepositTx(mapWriteError('deposit', error, 'The deposit could not be sent.', chainWhere));
+          setPromptError(promptErrorFor(error, chainWhere));
         },
       });
     } catch (cause) {
-      setDepositTx(mapWriteError('deposit', cause, 'The deposit could not be sent.'));
-      setPromptError(describeWriteError(cause));
+      setDepositTx(mapWriteError('deposit', cause, 'The deposit could not be sent.', chainWhere));
+      setPromptError(promptErrorFor(cause, chainWhere));
     }
   }
 
@@ -357,6 +407,7 @@ export function DepositForm({
             walletChainId={walletChainId}
             onSwitch={onSwitchChain}
             switching={isSwitching}
+            accountMissing={walletAccountMissing}
           />
           {/*
             THE FIELD IS PRESENT AND DISABLED, IN THE UNIT IT WILL TAKE.

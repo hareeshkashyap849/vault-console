@@ -29,6 +29,10 @@
  * this file can be tested by handing it the exact shapes those libraries produce.
  */
 
+/** The failure CLASSIFIER and its wording. A dependency on this file would be a cycle, so neither does. */
+import { classifyWalletError } from './walletError.ts';
+import { walletFailureText } from './walletFailureCopy.ts';
+
 export type TxPhase = 'idle' | 'pending' | 'confirmed' | 'failed' | 'rejected';
 
 /** Which of the two implemented write paths the transaction belongs to. */
@@ -201,9 +205,49 @@ export function rejectedState(step: TxStep): TxState {
   };
 }
 
-export function failedState(step: TxStep, hash: `0x${string}` | null, err: unknown, fallback: string): TxState {
+export function failedState(
+  step: TxStep,
+  hash: `0x${string}` | null,
+  err: unknown,
+  fallback: string,
+  /**
+   * The sentence to lead with, when the caller knows which CLASS of failure this is.
+   *
+   * `describeTxError` prefers any readable text it finds, which is right when the cause is unknown
+   * and wrong when the app has already named the class -- the same trap `unreadReceiptState`
+   * documents. Passing the class's sentence here is what makes it the headline and leaves the
+   * transport text where it belongs: in `detail`, one disclosure away. `null` keeps the old
+   * behaviour exactly, which is what the callers that have no classification pass.
+   */
+  sentence: string | null = null,
+): TxState {
   const { message, detail } = describeTxError(err, fallback);
-  return { phase: 'failed', step, hash, message, detail, error: message };
+  /**
+   * THE CLASS'S SENTENCE AND THE UNDERLYING REASON, IN ONE READER-FACING LINE.
+   *
+   * THE REASON STAYS IN THE HEADLINE, and that is not decoration: it is the same rule
+   * `deterministicFailedState` states a few functions up -- the class's sentence is what the reader's
+   * NEXT ACTION depends on, and the underlying reason is what tells them whether it is the failure
+   * they think it is (`ERC4626ExceededMaxDeposit` and a paused vault call for different moves). The
+   * long viem report still goes to `detail`, behind the disclosure, because THAT is the diagnostic.
+   *
+   * Not appended when the sentence already carries it, so nothing is said twice.
+   */
+  const headline =
+    sentence === null || message === sentence || message.includes(sentence)
+      ? (sentence ?? message)
+      : `${sentence} The underlying failure was: ${message}`;
+  return {
+    phase: 'failed',
+    step,
+    hash,
+    message: headline,
+    // When there is no class sentence the headline IS the error's readable line, so the detail is
+    // `describeTxError`'s -- which is null unless viem wrapped the error in a longer report. That is
+    // the behaviour the older callers' assertions on `detail` expect.
+    detail,
+    error: headline,
+  };
 }
 
 /**
@@ -259,10 +303,35 @@ export function unreadReceiptState(step: TxStep, hash: `0x${string}` | null, err
  * The ordering is the content: a rejection is checked FIRST and returns the neutral state, so
  * no later branch can reclassify it. A version that checked "is it an error" first would put
  * `4001` on the red path, which is the defect this file exists to prevent.
+ *
+ * WHICH FAILURE IT WAS, AND WHY THAT IS A SECOND QUESTION
+ *
+ * The phase is a SHAPE; the class is a REASON. Measured on the published page, every failure that
+ * was not a cancellation landed on `failed` carrying the wallet's own transport text: a
+ * disconnected provider printed `The Provider is disconnected from all chains.`, and an account
+ * that could not pay for gas printed the node's `insufficient funds for gas * price + value: ...`
+ * (`BROWSER-TEST-PLAN.md` §5 row 6). Those are transcriptions, not sentences, and they do not tell
+ * the reader which of six different things to do next.
+ *
+ * So `src/lib/walletError.ts` classifies the failure and owns the sentence, and this function asks
+ * it -- ONE decision, rendered in one place. The `fallback` parameter keeps its exact meaning: it is
+ * used only when the class is `unknown`, i.e. when the error carries nothing this app can name.
+ * (That is also why `4001` is not left to the classifier alone: the neutral phase is this module's
+ * rule and its ordering, and a second opinion about it is the failure mode this file exists to
+ * prevent. The classifier agrees, and its `rejected` branch is asserted against the same code.)
  */
-export function mapWriteError(step: TxStep, err: unknown, fallback: string): TxState {
+export function mapWriteError(
+  step: TxStep,
+  err: unknown,
+  fallback: string,
+  where: { chainId: number; chainName: string } = { chainId: 0, chainName: 'the deployment chain' },
+): TxState {
   if (isUserRejection(err)) return rejectedState(step);
-  return failedState(step, null, err, fallback);
+  const sentence = walletFailureText(classifyWalletError(err), where);
+  // `null` from the copy module means either "the page already says this" (a cancellation, which
+  // cannot reach here) or "this app has no name for it" -- and for the second, the caller's own
+  // fallback is the sentence, exactly as before.
+  return failedState(step, null, err, fallback, sentence);
 }
 
 /**

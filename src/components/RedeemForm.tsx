@@ -12,6 +12,8 @@ import {
 import { AmountField, DecisionNote, Panel, ScopeNote, TxStatus, WalletStateNotice } from '@/components/WalletPanels';
 import { VAULT_ABI } from '@/lib/chain';
 import { chainRefusalFor, decideRedeem, figure, maxAmountDecimal, type RedeemDecision } from '@/lib/vaultActions';
+import { classifyWalletError } from '@/lib/walletError';
+import { walletFailureText } from '@/lib/walletFailureCopy';
 import { walletChainNow } from '@/lib/wagmi';
 import {
   describeWriteError,
@@ -24,9 +26,18 @@ import {
 } from '@/lib/txState';
 
 interface Props {
+  /** The deployment's chain id, from `api/config`. Every refusal names it, so it is passed, not read. */
   chainId: number;
+  /** The deployment's chain name, from the same record. Failure sentences name both. */
+  chainName: string;
   vault: `0x${string}`;
   account: `0x${string}` | undefined;
+  /**
+   * CONNECTED, AND THE WALLET REPORTS NO ACCOUNT. See the same prop in `DepositForm`: measured with a
+   * wallet answering `eth_accounts` with an empty array, this page rendered a stale address and
+   * offered a write nothing could sign. Named rather than papered over.
+   */
+  walletAccountMissing: boolean;
   /** The wallet's chain, or `null` when no wallet is connected. Not the app's chain. */
   walletChainId: number | null;
   assetSymbol: string;
@@ -35,6 +46,20 @@ interface Props {
   /** Offered on the wrong-chain path, and defined once in `VaultManager`. */
   onSwitchChain: () => void;
   isSwitching: boolean;
+}
+
+/**
+ * THE ERROR BOX, WITHOUT SAYING THE SAME THING TWICE. The same rule as `DepositForm`'s, for the same
+ * reason: a classified failure already renders its class's sentence in `TxStatus`, so repeating the
+ * wallet's transport text under it is two messages about one fact. An unclassified error keeps the
+ * old behaviour, because for that case the error's own text is all there is. A `4001` returns `null`.
+ */
+function promptErrorFor(err: unknown, where: { chainId: number; chainName: string }): { message: string | null; detail: string | null } | null {
+  const kind = classifyWalletError(err);
+  const sentence = walletFailureText(kind, where);
+  if (sentence === null && kind !== 'unknown') return null;
+  if (sentence !== null) return { message: sentence, detail: null };
+  return describeWriteError(err);
 }
 
 /**
@@ -67,8 +92,10 @@ interface Props {
  */
 export function RedeemForm({
   chainId,
+  chainName,
   vault,
   account,
+  walletAccountMissing,
   walletChainId,
   assetSymbol,
   assetDecimals,
@@ -84,6 +111,9 @@ export function RedeemForm({
   /** True while the wallet is being asked which chain it is on, so a second click cannot slip past. */
   const [checkingChain, setCheckingChain] = useState(false);
   const { connector } = useConnection();
+
+  /** The two facts every failure sentence names. Built once, so no call site can name a different pair. */
+  const chainWhere = { chainId, chainName };
 
   const shares = shareDecimals ?? 0;
   const sharesKnown = shareDecimals !== null;
@@ -228,13 +258,15 @@ export function RedeemForm({
       writeContract(request, {
         onSuccess: (hash) => setTx(pendingState('redeem', hash)),
         onError: (error) => {
-          setTx(mapWriteError('redeem', error, 'The redemption could not be sent.'));
-          setPromptError(describeWriteError(error));
+          // Classified, exactly as the deposit path is: the reader is told which failure it was and
+          // what to do, instead of being handed the wallet's transport text.
+          setTx(mapWriteError('redeem', error, 'The redemption could not be sent.', chainWhere));
+          setPromptError(promptErrorFor(error, chainWhere));
         },
       });
     } catch (cause) {
-      setTx(mapWriteError('redeem', cause, 'The redemption could not be sent.'));
-      setPromptError(describeWriteError(cause));
+      setTx(mapWriteError('redeem', cause, 'The redemption could not be sent.', chainWhere));
+      setPromptError(promptErrorFor(cause, chainWhere));
     }
   }
 
@@ -248,6 +280,7 @@ export function RedeemForm({
             walletChainId={walletChainId}
             onSwitch={onSwitchChain}
             switching={isSwitching}
+            accountMissing={walletAccountMissing}
           />
           {/* Present and disabled, in the unit it will take -- see the same block in DepositForm. */}
           <AmountField

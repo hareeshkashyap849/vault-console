@@ -266,20 +266,47 @@ export function WalletStateNotice({
   walletChainId,
   onSwitch,
   switching,
+  accountMissing,
 }: {
   kind: 'no-wallet' | 'wrong-chain';
   chainId: number;
   walletChainId: number | null;
   onSwitch: () => void;
   switching: boolean;
+  /**
+   * THE WALLET IS CONNECTED AND REPORTS NO ACCOUNT.
+   *
+   * `wagmi`'s `getConnection()` builds `address` from `connection.accounts[0]`, so a wallet that
+   * answers `eth_accounts` with an empty array gives `isConnected: true` and `address: undefined`:
+   * the exact shape that made the published page show an address nothing could be read for, offer a
+   * write control that could only fail, and leave it reading `Waiting for the wallet…` for ever. The
+   * sentence is separate from "no wallet connected" because the FIX is different -- connecting is
+   * already done, and what the reader must do is make the wallet report an account again.
+   *
+   * DELIBERATELY DEFENSIVE RATHER THAN PROVED BY A LOCAL RUN: with a stub wallet the connector
+   * usually ends up fully disconnected instead (wagmi takes the permission rejection and clears the
+   * connection), so this branch renders only when the connection survives with no account. That is
+   * the state the published site reached; `tools/wallet-double-assert.mjs` scenario E asserts the
+   * invariant covering both -- no address, no write control, and the state said out loud.
+   */
+  accountMissing?: boolean;
 }) {
   return (
     <div className="rounded-md border border-slate-700/60 bg-slate-800/30 p-3 text-xs text-slate-300">
       {kind === 'no-wallet' ? (
-        <p>
-          No wallet is connected, so there is nothing to sign with and no address to read a position for. Use the
-          wallet panel above to connect one. Reading this page needs no wallet.
-        </p>
+        accountMissing === true ? (
+          <p>
+            The wallet is connected but is not reporting any account, so there is no address to read a
+            position for and nothing this page could ask it to sign. Unlock the wallet, make sure this
+            site is still connected in it, and reconnect here -- every figure below would otherwise be
+            read for an account the wallet is not offering.
+          </p>
+        ) : (
+          <p>
+            No wallet is connected, so there is nothing to sign with and no address to read a position for. Use the
+            wallet panel above to connect one. Reading this page needs no wallet.
+          </p>
+        )
       ) : (
         <p className="flex flex-wrap items-center gap-2">
           <span>

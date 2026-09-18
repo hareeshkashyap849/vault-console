@@ -585,6 +585,128 @@ the console column means "the console errors and uncaught exceptions this page p
 > click, not before it. Nothing above says the write path is now measured end to end with a real
 > wallet; §8's verdict is unchanged.
 
+> **Fifth amendment, 2026-09-19. The stub wallet was extended to every failure class a wallet's
+> EIP-1193 surface can produce WITHOUT a signature, and it found two more defects in the same seam a
+> person found the first two in. This block is added, not substituted: rows 1–8 above keep their
+> status cells exactly as they stand, and what changes is the REASON each open one is open.**
+>
+> **What was done, and in what order.** First the failure classes the code promises and the interface
+> renders were ENUMERATED against the copy that exists (`src/lib/txState.ts`, `src/lib/vaultActions.ts`),
+> and the ones with no dedicated copy, no assertion or no evidence were written down. Then each class
+> was injected through `tools/wallet-double-assert.mjs` — a stub EIP-1193 provider installed before any
+> page script — into the **published** console, and what the page rendered was transcribed before
+> anything was changed. **Then** the code was fixed where a class had no copy, and the same tool was
+> re-run against a local export of the fixed sources and, after the deploy, against the published site.
+>
+> **The two defects it found, both measured on the published page before any fix:**
+>
+> - **A DISCONNECTED WALLET WAS PRINTED AS A NAMELESS FAILURE.** The wallet answers the send with
+>   EIP-1193 `4900` and the page rendered, as the whole headline,
+>   `The Provider is disconnected from all chains.` — the transport's words, naming neither the
+>   consequence (nothing was sent) nor the next action (reconnect, to which chain). Row 6's shape
+>   exactly, one class over.
+> - **A FAILED CHAIN SWITCH WAS NOT SAID AT ALL.** `wallet_switchEthereumChain` was called and
+>   refused; the page re-rendered the SAME "Switch the wallet to chain 84532 -- it is currently on
+>   chain 8453 …" refusal it had shown before the click, and said nothing about the attempt. Measured
+>   with `4902` (MetaMask's own `Unrecognized chain ID "0x14a34". Try adding the chain using
+>   wallet_addEthereumChain first.`) and again with `4001` (the reader declining the switch): the
+>   rendered text was identical in both runs and identical to the pre-click text.
+>
+> **What the page had no copy for, class by class, before and after.** Each row is a class the wallet
+> can produce; "before" is what the published page rendered under the stub, "after" is what it
+> renders now.
+>
+> | Class (EIP-1193) | What the page rendered BEFORE | What it renders AFTER |
+> |---|---|---|
+> | `4001` declined send | `You cancelled this(approve)` + the neutral sentence — **correct**, and the one class that already had copy (row 2's fix, `413ce8e`) | unchanged |
+> | `4001` declined chain switch | the pre-click refusal, unchanged — **nothing about the attempt** | `The chain switch was cancelled in the wallet, so the wallet is still not on chain 84532 (Base Sepolia). Nothing is sent until it is.` |
+> | `4902` chain the wallet does not know | the pre-click refusal, unchanged — **nothing about the attempt** | the same switch sentence, plus (measured) the app **offering the chain** via `wallet_addEthereumChain`, which is what the wallet's own sentence asks for |
+> | `4900` mid-flight disconnect | `The transaction failed(approve)` / `The Provider is disconnected from all chains.` | `The wallet disconnected while this request was in flight, so nothing was signed and nothing was sent. Reconnect it to chain 84532 (Base Sepolia) and ask again.` — with the provider's words kept in the disclosure |
+> | `eth_accounts → []` (no account) | a **stale address**, a balance read for it, and `1. Approve USDC`; the click then left the control reading `Waiting for the wallet…` for ever with no notice | no address, no write control, and the state said out loud — measured on the published site as its no-wallet state with a connect control, which is correct |
+> | insufficient gas (§5 row 6) | **no class at all**: the app printed the chain's own text (`gas required exceeds allowance (0)`, and on 2026-09-17 `insufficient funds for gas * price + value: …`) | the class has its own sentence and its own classification — **but see the limit below: the stub cannot make the page report it** |
+>
+> **How it was measured, and the counts.**
+>
+> | Run — `tools/wallet-double-assert.mjs`, 47 assertions | Result |
+> |---|---|
+> | **the published page, before any fix** (the code a reader had) | **38 passed / 9 failed of 47** — the 8 assertions of scenarios A, B, C1 and C2 all pass (they are the fourth amendment's), and all 9 failures are new: 3 in scenario D, 4 in scenario E, 1 each in F1 and F2 |
+> | **a local export with ONLY the source fix stashed** (the fix's own modules moved aside, everything else in place) | **42 passed / 5 failed of 47** — D's 3 and F1/F2's 2. **Scenario E passes on the old code locally**, and the reason is measured: see below |
+> | **a local export of the fixed sources** | **47 passed / 0 failed of 47**, exit 0 |
+> | **the PUBLISHED site after the deploy** | **47 passed / 0 failed of 47**, exit 0 |
+>
+> Evidence: `verification/out/wallet-double-assert-NEW-ASSERTIONS-OLD-CODE-live.txt`,
+> `verification/out/wallet-double-assert-NEW-ASSERTIONS-OLD-CODE-local-stash.txt`,
+> `verification/out/wallet-double-assert-FIXED-local-2026-09-19.txt`,
+> `verification/out/wallet-double-assert-LIVE-2026-09-19.txt`. The error shapes the classifier is
+> asserted against are not invented either: they are what viem 2.56.5 actually builds, captured by
+> driving viem's own `writeContract` against a refusing transport
+> (`tools/_probe-viem-shapes.mjs` → `verification/out/viem-error-shapes-2.56.5.txt`), and
+> `test/wallet-errors.test.ts` (17 tests) builds those same shapes by hand.
+>
+> **WHERE THE PAGE'S NO-ACCOUNT BRANCH WAS MEASURED, AND WHY THE LOCAL RUN DOES NOT REPRODUCE IT.**
+> On the published console the empty-`eth_accounts` scenario rendered a stale address and offered a
+> write; on a **fresh local origin** the same stub leaves the page rendering its no-wallet state with
+> a connect control, which is correct. The difference is the environment, not the code: the published
+> run is inside the user's real browser, where a **real extension is installed beside the stub and a
+> connection is already persisted for that origin**. Three local conditions were tried to reproduce
+> it — a fresh origin, `localStorage` cleared, and a hand-seeded `wagmi.store` carrying a connection —
+> and all three rendered the no-wallet state. So scenario E is a **regression guard on the invariant**
+> (no address, no write control, and the state said out loud) rather than a local reproduction, and
+> the reproduction of record is the published run, where all four of its assertions fail. That is the
+> same treatment this file gives every other measurement whose target produced it.
+>
+> **WHAT THE EXTENSION CANNOT DO, MEASURED RATHER THAN ASSUMED — the limit that keeps rows 6 and 7
+> open.** A gas refusal and a revert both reach the page through viem's own fill/estimate chain, and
+> that chain does not simply forward the wallet's answer: driven in **Node** against viem 2.56.5 the
+> refusal arrives at `mapWriteError`, but driven **in the browser** through this stub the same refusal
+> is answered by the app's own RPC instead — the app's transport log shows `eth_call`s where the
+> wallet's error was expected, and no wallet error is ever the one the page reports. A synthetic
+> receipt was also attempted (serving `eth_getTransactionReceipt` for a synthetic hash through the
+> app's own transport, and a `status: 0x0` body) and did not reach `mapReceipt` either. So:
+> **the stub covers every class the wallet's EIP-1193 surface produces on its own, and none of the
+> classes that need a chain.** Those are proven where they can be — `test/wallet-errors.test.ts`
+> asserts the classification against real viem error shapes, including both of the two that share
+> code `-32000` and differ only by class — and their browser half stays with a person.
+>
+> **Which rows gained measured coverage, and which remain — the row-by-row accounting.**
+>
+> | §5 row | Before this amendment | After it | Why the remaining part needs a human |
+> |---|---|---|---|
+> | **1** wallet not installed | `implemented; interaction not measured` | **unchanged** | A stub PROVIDER's whole job is to be present, so no version of this double can produce "no provider". Needs a browser with the extension removed — a person, or a clean profile |
+> | **2** refused prompt (`4001`) | partly measured; row 2's fix verified 21/21 | **measured for the error path** — the rejection is asserted end to end, and a rejection that mentions gas, or a chain, is still rendered as a cancellation | The prompt itself: that MetaMask shows one and that a person's Reject is what produces the `4001` |
+> | **3** wrong chain | partly measured; guard fix verified 21/21 | **unchanged, and unchanged on purpose** — the settled switch and the same-task race are both asserted (B, C1, C2) | A real wallet switch, and that MetaMask names these two chains |
+> | **4** insufficient allowance | partly measured by a post-hoc capture | **unchanged** | The approve offered instead of a deposit is measured; that the approve is *signed* and the allowance *re-read* needs a real signature |
+> | **5** insufficient balance | logic proven | **unchanged** | Same: the refusal is a pre-flight decision, asserted; driving it through a wallet changes nothing about it |
+> | **6** insufficient gas | **no copy at all** (a recorded gap) | **the copy now exists and the class is asserted** (`test/wallet-errors.test.ts`), **and the browser half is still open** | A wallet that cannot pay for gas, and a chain that refuses for funds — the stub cannot make either reach the page (measured above) |
+> | **7** reverted | logic proven | **unchanged** | A chain that reverts a real transaction. The receipt path is asserted in unit tests and the synthetic-receipt attempt is recorded above |
+> | **8** replaced | no dedicated state; recorded gap | **unchanged** | A wallet that replaces a pending transaction. The unread-receipt sentence is what covers it, asserted in `mapReceipt`'s tests |
+> | **9, 10, 11** the read paths | passed 2026-09-16 | **unchanged** | Nothing: these three are passed by measurement and were not touched |
+>
+> **HOW MANY ROWS STILL NEED A HUMAN, AND WHY — the number this amendment exists to make small.**
+> **Eight of §5's eleven rows still have something only a person can produce** (rows 1–8; rows 9–11
+> are passed by measurement and need nobody), and the honest count of what remains is:
+>
+> - **1 row** needs a browser with no wallet extension at all (row 1);
+> - **7 rows** need a real MetaMask prompt, signature or chain — rows 2–8, and of those, **rows 4 and
+>   5 are pre-flight decisions that are already proven as far as a program can prove them**: what
+>   remains for them is the same prompt and signature as the rest, not a class of their own.
+>
+> What changed is the SIZE of that human half: **it was "the whole interaction" for eight rows, and it
+> is now four steps** (`TEST-DOUBLES.md` §2a), because each act that could be automated was removed
+> from the list rather than left on it. The four steps, and the one thing each needs that no program
+> has:
+>
+> 1. reject an approve prompt — a person's decision at a prompt;
+> 2. a chain switch refused at the prompt — the same, on the switch path;
+> 3. approve + deposit for real — a funded key, a signature, and a chain that accepts it;
+> 4. reject with the extension window in the foreground — the prompt itself, on screen beside the page.
+>
+> **What this amendment does not claim.** It does not move any row to `passed`, and it does not
+> change §8's verdict, which is still **not passed**. The defects it found were found by a tool
+> written after the two a person found, and it still cannot produce the prompt, the signature or the
+> chain. What it adds is that the page's answers to the failure classes a wallet can produce on its
+> own are now measured, worded in one place, and asserted by a tool that fails when they regress.
+
 | # | Failure class | How it is injected | What is asserted (wording + rendered result + state) | Evidence requirement | Status |
 |---|---|---|---|---|---|
 | 1 | Wallet not installed | Open `/vault/manage` in a browser with no extension | `"No injected wallet was found in this browser. This app uses injected() …"`, and the deposit and redeem controls stay inert rather than accepting input that could never be signed | screenshot: **not run** | **implemented; interaction not measured** |
