@@ -3,7 +3,7 @@
 A React/Next.js front end over an ERC-4626 vault: a read-only console, an indexed history, and a
 wallet page that deposits and redeems.
 
-**Live:** <https://hareeshkashyap849.github.io/vault-console/> — published as a **static export** on
+**Live:** <https://wuzilin-web3.github.io/vault-console/> — published as a **static export** on
 GitHub Pages. No server runs: the addresses come from the deployment record at build time
 (`scripts/build-runtime-config.mjs` writes `public/api/config`) and the chain is read by the browser
 from `https://sepolia.base.org`. The vault is
@@ -373,7 +373,7 @@ what it invalidated, and what is still unproven is recorded in `docs/STATIC-EXPO
   "no transaction has been sent from this page", "these four rows … remain `not run`" and "the
   connected state has never rendered live" are not true, and a measurement rather than a retraction
   is what made them false.** That day a person drove the
-  **published** page (`https://hareeshkashyap849.github.io/vault-console/vault/manage/`) in the
+  **published** page (`https://wuzilin-web3.github.io/vault-console/vault/manage/`) in the
   user's real Chrome through a real MetaMask, and the four steps of `TEST-DOUBLES.md` §2a were
   recorded in `verification/out/manual-wallet-2026-09-18.txt`. Against that record:
 

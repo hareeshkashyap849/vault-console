@@ -93,8 +93,8 @@ env:
   # and ignores every other database there). `erc4626-vault` holds `deployments/`, which is the
   # single place the vault's address, chain and start block are known; the service reads its record
   # from there rather than keeping a copy.
-  INDEX_REPO: https://github.com/hareeshkashyap849/erc4626-vault-dapp
-  VAULT_REPO: https://github.com/hareeshkashyap849/erc4626-vault
+  INDEX_REPO: https://github.com/wuzilin-web3/erc4626-vault-dapp
+  VAULT_REPO: https://github.com/wuzilin-web3/erc4626-vault
 
 jobs:
   build:

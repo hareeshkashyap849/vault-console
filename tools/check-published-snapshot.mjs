@@ -30,7 +30,7 @@
  *
  * Usage:
  *   node tools/check-published-snapshot.mjs --base http://127.0.0.1:8123
- *   node tools/check-published-snapshot.mjs --base https://hareeshkashyap849.github.io/vault-console
+ *   node tools/check-published-snapshot.mjs --base https://wuzilin-web3.github.io/vault-console
  *
  * Exit 0 only if every check passed. `--expect-deposit-block` defaults to the real Base Sepolia
  * `Deposit`, which is the one row that proves the snapshot came from the chain rather than from an

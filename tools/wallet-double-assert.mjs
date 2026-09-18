@@ -62,7 +62,7 @@ const flag = (name, fallback) => {
   return i === -1 ? fallback : args[i + 1];
 };
 
-const PAGE = flag('--url', 'https://hareeshkashyap849.github.io/vault-console/');
+const PAGE = flag('--url', 'https://wuzilin-web3.github.io/vault-console/');
 /** The account the stub answers with. The default is the account the measured episodes used. */
 const ACCOUNT = flag('--account', '0x2aE746C0ff0295c2da1aC338656F247e9758E034');
 /**
