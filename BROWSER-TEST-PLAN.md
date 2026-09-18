@@ -575,7 +575,10 @@ the console column means "the console errors and uncaught exceptions this page p
 > assertions, exit 0** (`verification/out/browser-assert-against-export-2026-09-18-after-write-guards.txt`),
 > the same 58 this file recorded before the change. It also re-read the published snapshot: the
 > history page renders **3 event rows** and its count label claims 3 — the third deposit is in the
-> published artefact, not only in the index repository.
+> published artefact, not only in the index repository. **Both runs were then repeated on the head
+> that carries this amendment** (`c9e14bf`, whose app code is identical to `413ce8e`): the assertion
+> tool **58/58, exit 0** (`verification/out/browser-assert-against-export-c9e14bf.txt`) and the wallet
+> double **21/21, exit 0** (`verification/out/wallet-double-assert-LIVE-c9e14bf.txt`).
 >
 > **The one thing this amendment does not claim.** The two defects were found by a person, not by a
 > test, and the test that would have caught either one is the one added here — written after the
