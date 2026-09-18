@@ -29,6 +29,27 @@
 > asserts is still uncaptured and three things about the session are unresolved; §5's 2026-09-17
 > amendment in `web3-development-execute/projects/vault-console/BROWSER-TEST-PLAN.md` has the
 > measurement and the open checks.
+>
+> **Update 2026-09-18, and the 2026-09-17 paragraph above is kept because it was true when it was
+> written.** The reason it gives for the `partly measured` wording — *the wording each row asserts is
+> still uncaptured* — no longer holds, and the measurement is what retired it. A person drove the
+> published `/vault/manage` through a real MetaMask again, on **Base Sepolia (84532)**, and the record
+> is `verification/out/manual-wallet-2026-09-18.txt`: the page's rendered text is captured, and it
+> includes the cancellation copy for a real `4001`, the `chain-not-added` copy for a real `4902`, and
+> `"Deposit confirmed on chain."` against a receipt for a 1.0 USDC deposit
+> (`0x8f114b1d30d1373cfab3d0fd2ce35c78221d165b60bce0bf88dad0f784a24551`, block 46,971,145, whose
+> approve is `0x71b0dfb13ea866d9821c54e0b4e25c582b160f504762cb77d661e866976606e8`, block 46,971,112).
+> `verification/out/screen-metamask-prompt.png` is the frame the earlier sessions lacked: the page in
+> its pending state reading *"Waiting for the wallet…"* with the wallet's own prompt in front of it.
+> Of the three things the paragraph above calls open, **all three are filled in and the third is
+> narrower rather than closed**: the approve's own hash is identified, the `Deposit` log now decodes
+> to `sender` = `owner` = `0x2ae7…E034`, `assets` = `1000000`, `shares` = `1e18`, and the
+> intermediary is **named** — it is an EIP-7702 delegation relay (the approve's receipt has `from`
+> `0xb01caea8…` and `to` `0xdb9b1e94…`, the MetaMask `DelegationManager`, neither the connected
+> account) — so the account's writes can arrive either through it or directly (the deposit was
+> direct), and **which route a given write takes is not explained by anything measured**. What that
+> session still is not: it made no second deposit, so the "does not re-prompt for approval" row is
+> untouched.
 
 This is the work order for turning `vault-console` from one read-only page into a multi-page
 front end with wallet connection, and for folding in the wallet operations that the sibling

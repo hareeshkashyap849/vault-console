@@ -49,6 +49,32 @@ from that session had already been disproved by measurement. The measurement, th
 three open checks are in
 `web3-development-execute/projects/vault-console/BROWSER-TEST-PLAN.md` §5's 2026-09-17 amendment.
 
+> **Amendment, 2026-09-18. The paragraph above describes the 2026-09-17 session and is kept as
+> written; its closing sentence — "the session captured no screenshot and no rendered text" — was
+> true of that session and is not true of the wallet path after 2026-09-18.** A person drove the
+> published wallet page through a real MetaMask again, and this time the page and the wallet were
+> captured together: `verification/out/screen-metamask-prompt.png` (the published page in its
+> **pending** state reading *"Waiting for the wallet…"*, the deposit field `1`, `vault allowance
+> 0 USDC (read from the chain, never remembered)`, with MetaMask's spending-cap prompt in front of
+> it) and `verification/out/step2-switch-pending-2026-09-18.png` /
+> `verification/out/manual-wallet-step2-cancelled-2026-09-18.png` (the switch request in flight, and
+> the same control after the refusal). The rendered text is captured with the chain reads in
+> `verification/out/manual-wallet-2026-09-18.txt`: a real **`4001`** answered the app's own
+> `wallet_switchEthereumChain {"chainId":"0x14a34"}` and the page rendered *"The chain switch was
+> cancelled in the wallet, so the wallet is still not on chain 84532 (Base Sepolia). Nothing is
+> sent until it is."*, a real **`4902`** reached the `chain-not-added` copy, and a rejection at the
+> approval prompt rendered the page's cancellation panel with the allowance still `0` and the nonce
+> unmoved (`6 → 6`) — the `4001` is measured on the switch path, and on the write path what is on
+> record is the panel rather than the code. **So the reason this
+> file gave for holding the write-path rows short of a page-level claim has changed shape**: what
+> the 2026-09-17 session left unestablished about the *page* is now established for the classes
+> those steps exercise, and what is still not established is the relay route — the 2026-09-18
+> approve was executed **on behalf of** the account through the EIP-7702 delegation relay (`from`
+> `0xb01caea8c6c47bbf4f4b4c5080ca642043359c2e`, `to`
+> `0xdb9b1e94b5b69df7e401ddbede43491141047db3`, the MetaMask `DelegationManager`) while the deposit
+> was sent directly by the account, and **why one write took each route is not explained** — plus
+> whether the rows' own status cells move, which is §5's decision and not this file's.
+
 | Browser | Version | Measured? | Measured result | Note |
 |---|---|---|---|---|
 | Chrome (the user's real profile, with MetaMask 13.48) | Chromium family, version follows the user's environment | **Yes** | **51/51 assertions passed, 0 failed** | see `docs/evidence/browser-assert.txt` and `console-live.png`. The console's original 14 are unchanged; 17 of the rest cover `/history`, including two that read the page's own arithmetic back off the painted DOM |

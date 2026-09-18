@@ -104,6 +104,33 @@ export function walletFailureText(kind: WalletFailureKind, where: ChainIdentity)
  * and nothing is sent -- and none of them claims which of the two prompts was declined. Saying more
  * would need the 4902 the layer above discards.
  *
+ * THAT PARAGRAPH IS TRUE OF THE STUB AND WAS CONTRADICTED BY THE REAL WALLET ON 2026-09-18, and the
+ * contradiction is kept here rather than smoothed over, because the difference between the two is the
+ * whole reason `TEST-DOUBLES.md` asks what a double simplified away. What happened: the app's own
+ * switch control was clicked while the wallet did not hold Base Sepolia, and the page rendered
+ * `chain-not-added`'s sentence -- with **no window raised** and the switch control offered again.
+ * Read against the two layers that decide it:
+ *
+ *   - `@wagmi/core` 3.7.7 (`connectors/injected.js`, `switchChain`) enters the add branch only when
+ *     `error.code === 4902` or `error.data.originalError.code === 4902` -- a strict test of those two
+ *     places -- and **every** way out of that branch is wrapped as `UserRejectedRequestError`, whose
+ *     code is `4001`.
+ *   - `classifyWalletError` tests `4001` first and answers `rejected`, so the add branch can never
+ *     render `chain-not-added`.
+ *
+ * So the 4902 signal reached the classifier without wagmi ever offering the chain, and exactly two
+ * shapes fit: either no level carried `4902` as a code and the WORDING
+ * (`unrecognized chain ... wallet_addEthereumChain`) matched, or a `4902` sat at a depth the
+ * connector's check does not read while `4001` appeared nowhere. **Which of the two it was is not
+ * known**, and one instrumented run against a wallet that does not hold the chain would say.
+ *
+ * What follows for the reader of the page: the sentence rendered was accurate about the state -- the
+ * wallet did not recognise the chain and nothing was sent -- while its instruction, "Offer that chain
+ * to the wallet with the switch control above", is the part that is **unverified**. Whether a second
+ * click makes MetaMask answer with a numeric `4902` so the add window appears, or fails the same way
+ * again, has not been measured. The stub cannot answer it: its error carries the code the connector
+ * tests, so the stub always takes the branch the real wallet skipped.
+ *
  * The kind is passed in rather than classified here for the reason this whole file exists: one
  * decision, one home -- `classifyWalletError` decides, and this function renders. `4001` reaches
  * here already classified as `rejected` (the wallet does not say WHAT was declined), and the caller

@@ -91,6 +91,23 @@ handling table, all four took the **"fix the code"** path.
 > This section is not empty; all three have concrete steps. MAN-01's step ③ and MAN-03's step ③
 > are **not yet executed** and are recorded in `BROWSER-TEST-PLAN.md` as "not run",
 > **not written up as passing**.
+>
+> **Amendment, 2026-09-18. The sentence above is kept because it was true when it was written; what
+> it points at has moved, and part of its reason has been retired by a measurement.** Today a person
+> drove the **published** wallet page
+> (`https://hareeshkashyap849.github.io/vault-console/vault/manage/`) through a real MetaMask on
+> chain **84532**, and the connected, live page rendered — under a real prompt — the `chain-not-added`
+> sentence for a real `4902`, the *"The chain switch was cancelled in the wallet, so the wallet is
+> still not on chain 84532 (Base Sepolia). Nothing is sent until it is."* sentence for a real
+> `4001`, and *"Deposit confirmed on chain."* against a receipt for a 1.0 USDC deposit (record:
+> `verification/out/manual-wallet-2026-09-18.txt`; the capture
+> `verification/out/screen-metamask-prompt.png` holds the page's own pending state and the wallet's
+> prompt in one frame). That is the live-rendering measurement this ledger's wallet rows were
+> missing, so the reason "no live rendering exists" is retired in `SUPPORT-AND-SIGNOFF.md` §1.
+> **MAN-01's step ③ itself still has not been executed**: nothing in that session stopped a service,
+> so the *"a stopped service does not take the other panel with it"* half of that row remains
+> `not run`, and the sentence above stays true for it. **MAN-03's step ③ is untouched** — no dataset
+> with a moving price was introduced, so it stays `not run` for its original reason.
 
 ---
 

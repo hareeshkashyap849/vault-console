@@ -872,6 +872,26 @@ the console column means "the console errors and uncaught exceptions this page p
 > reports `"count": 4`, the newest event being that deposit at block 46,971,145 — so a reader's deposit
 > is not only on the chain but in the indexed, published product.
 >
+> **7. A real `4902` contradicted what this repository said a `4902` does, and the two now sit side by
+> side in the source.** `src/lib/walletFailureCopy.ts` recorded, measured against the stub, that
+> wagmi's `switchChain` offers the chain (`wallet_addEthereumChain`) when MetaMask answers `4902`, and
+> that the error reaching the app is therefore the **add's** `4001` — so every refusal on that path
+> renders the chain-switch sentence and the app cannot tell the two prompts apart. On 2026-09-18 a real
+> wallet without Base Sepolia produced the other branch: the page rendered the **`chain-not-added`**
+> sentence, **no window was raised**, and the switch control was offered again. Read against the
+> shipped code, that is only reachable if the add branch was never entered: `@wagmi/core` 3.7.7
+> (`connectors/injected.js`, `switchChain`) tests `error.code === 4902` or
+> `error.data.originalError.code === 4902` and wraps **every** exit from the branch as
+> `UserRejectedRequestError` (`4001`), which `classifyWalletError` answers as `rejected` before any
+> other branch. So either no level carried a numeric `4902` and the classifier matched the **wording**,
+> or a `4902` sat at a depth the connector does not read while `4001` appeared nowhere — **which of the
+> two is not known**, and one instrumented run against a wallet that does not hold the chain would say.
+> The stub cannot answer it, because its error carries the code the connector tests and therefore
+> always takes the branch the real wallet skipped. `TEST-DOUBLES.md` §3 carries this as a row where the
+> **double** is the thing that is wrong, and the source comment now records both readings rather than
+> the stub's alone. The page's sentence was accurate about the state; its instruction to "offer that
+> chain with the switch control above" is the part that stays unverified.
+>
 > **What this amendment does not claim.** It does not move rows 1, 7 and 8, which still have no
 > measured interaction; it does not implement row 6, whose browser half remains unreachable by the stub
 > for the reason recorded in the fifth amendment; and **it does not contain a capture of a rejection

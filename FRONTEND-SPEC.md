@@ -160,6 +160,33 @@ The fix was to split "raw base unit" and "already formatted by the service" into
 > measurement and the open checks; **this file's status column deliberately still reads
 > `not measured`**, since wording is what it is about.
 >
+> **AMENDED 2026-09-18, and the block above is kept because it is what was true when it was written.
+> The sentence that block rests on — "the session captured no page: no screenshot, no rendered
+> text" — is now false, and a measurement is what made it false.** A person drove the published
+> `/vault/manage` through a real MetaMask on **Base Sepolia (84532)** again, and this time the
+> page's own rendered text was captured alongside the chain reads: the record is
+> `verification/out/manual-wallet-2026-09-18.txt`, and
+> `verification/out/screen-metamask-prompt.png` holds the page's pending state (*"Waiting for the
+> wallet…"*) and the wallet's own prompt in one frame. Against that record, the wording this file's
+> rows are about now has captures behind it: a real `4001` produced *"The chain switch was cancelled
+> in the wallet, so the wallet is still not on chain 84532 (Base Sepolia). Nothing is sent until it
+> is."*, a real `4902` reached the `chain-not-added` copy, and a rejection at the approval prompt
+> rendered the page's cancellation panel with no hash and an unmoved nonce (`6 → 6`) — the `4001`
+> measured on the switch path, the panel on the write path. Of the three things the
+> block above leaves open, **all three are filled in and the third is narrower rather than closed**:
+> the approve has its own hash
+> (`0x71b0dfb13ea866d9821c54e0b4e25c582b160f504762cb77d661e866976606e8`, block 46,971,112, USDC
+> `Approval(owner = 0x2ae7…E034, spender = the vault, value = 1000000)`), the `Deposit` log decodes
+> (`0x8f114b1d30d1373cfab3d0fd2ce35c78221d165b60bce0bf88dad0f784a24551`, block 46,971,145:
+> `sender` = `owner` = `0x2ae7…E034`, `assets` = `1000000`, `shares` = `1e18`), and the intermediary
+> that block calls unestablished is **named** — an EIP-7702 delegation relay (the approve's receipt
+> has `from` `0xb01caea8…`, `to` `0xdb9b1e94…`, the MetaMask `DelegationManager`) — so **why one write
+> went through the relay and the next was sent directly by the account is an open question, not a
+> mechanism**. The rows below keep the status they have, and for a narrower reason than the block
+> above gives: what is still missing is not a capture of the page but the classes no step exercised
+> (a wallet with no extension, a forced revert, a replaced transaction, an under-funded wallet, and a
+> second deposit in one session).
+>
 > The three read-path classes remain **measured against the running services**
 > (`docs/evidence/scenario-9-*.txt`, `scenario-10-*.txt`, `scenario-11-*.txt`, each with a
 > screenshot).

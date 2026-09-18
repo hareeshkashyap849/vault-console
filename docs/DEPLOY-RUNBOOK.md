@@ -322,5 +322,27 @@ Recorded in the repository, not just in a chat message:
   rest of the evidence set (no screenshot, the approve's own hash unidentified, the `Deposit` log not
   decoded, and the deposit's `from`/`to` neither the connected account nor the vault). §5's 2026-09-17
   amendment is the record, and it is written without a causal account of the session.
+  **Amendment, 2026-09-18.** That sentence's list was true of the 2026-09-17 session; the items it
+  names are now filled in — the `from`/`to` item as far as naming is concerned — by a session rather
+  than by an argument, so the sentence is corrected here instead of left standing. A person drove the
+  **published** wallet page through a real MetaMask again
+  (`verification/out/manual-wallet-2026-09-18.txt`): the screenshot now exists
+  (`verification/out/screen-metamask-prompt.png`, the page in its *"Waiting for the wallet…"* pending
+  state with MetaMask's spending-cap prompt in the foreground); the approve has its own hash,
+  `0x71b0dfb13ea866d9821c54e0b4e25c582b160f504762cb77d661e866976606e8` (block 46,971,112, USDC
+  `Approval(owner = 0x2ae7…E034, spender = the vault, value = 1000000)`); the `Deposit` log now decodes
+  (`0x8f114b1d30d1373cfab3d0fd2ce35c78221d165b60bce0bf88dad0f784a24551`, block 46,971,145, type `0x2`,
+  nonce `6`, `deposit(1000000, 0x2ae7…E034)` → `Deposit(sender = owner = 0x2ae7…E034, assets =
+  1000000, shares = 1e18)`, and it is the read that verifies the `Deposit` topic used elsewhere); and
+  the intermediary **is now named**: the 2026-09-18 approve's own receipt shows `from`
+  `0xb01caea8c6c47bbf4f4b4c5080ca642043359c2e`, `to` `0xdb9b1e94b5b69df7e401ddbede43491141047db3` (the
+  MetaMask `DelegationManager`) — neither the connected account — with the account carrying an EIP-7702
+  delegation, i.e. the approval was executed **on behalf of** the account through that relay, while the
+  deposit was sent directly by the account. **What is left is narrower, and it is not a mechanism**: the
+  relay's existence is measured, and **why one write took the relay route and the other the direct route
+  is not explained by anything measured** — the record at
+  `verification/out/manual-wallet-2026-09-18.txt` states that as an open question rather than as a
+  mechanism. The **published** index snapshot also reports `"count": 4` events now, the newest being that
+  deposit at block 46,971,145, so the write is visible end to end through the public system.
 - **Free hosting sleeps.** A Render instance and a Vercel cold start both mean the first request
   after a quiet period is slow, which looks like a broken page to whoever opens it first.

@@ -360,7 +360,7 @@ what it invalidated, and what is still unproven is recorded in `docs/STATIC-EXPO
 
   | Not proven | What would prove it |
   |---|---|
-  | a deposit really happens: transaction hash, block, `Deposit` event, `totalAssets` before/after | a real wallet on chain 31337, funded, approving |
+  | a deposit really happens: transaction hash, block, `Deposit` event, `totalAssets` before/after | a real wallet on chain **84532**, funded, approving — this row said `31337`, which is the pre-Base-Sepolia copy of the deployment's chain (corrected 2026-09-18) |
   | the second deposit does not re-prompt for approval | the same, twice in one session |
   | a cancellation is neutral in a real wallet | rejecting at the prompt |
   | the wrong chain disables the control in a real wallet | the wallet on another chain |
@@ -368,6 +368,63 @@ what it invalidated, and what is still unproven is recorded in `docs/STATIC-EXPO
   The page's **connected** state has also never rendered live: the browser available for
   testing had no account authorised for the site, so only the no-wallet branch was exercised.
   Both branches compile and typecheck, and the no-wallet branch is asserted.
+
+  **AMENDED 2026-09-18. The sentences above were true when they were written; as of 2026-09-18,
+  "no transaction has been sent from this page", "these four rows … remain `not run`" and "the
+  connected state has never rendered live" are not true, and a measurement rather than a retraction
+  is what made them false.** That day a person drove the
+  **published** page (`https://hareeshkashyap849.github.io/vault-console/vault/manage/`) in the
+  user's real Chrome through a real MetaMask, and the four steps of `TEST-DOUBLES.md` §2a were
+  recorded in `verification/out/manual-wallet-2026-09-18.txt`. Against that record:
+
+  - a real **`4001`** — the wallet's own *"User rejected the request."* — answered the app's own
+    `wallet_switchEthereumChain {"chainId":"0x14a34"}`, and the page rendered *"The chain switch was
+    cancelled in the wallet, so the wallet is still not on chain 84532 (Base Sepolia). Nothing is
+    sent until it is."*; a real **`4902`** reached the page's `chain-not-added` copy the same day;
+  - a real approve and a real deposit landed: approve
+    `0x71b0dfb13ea866d9821c54e0b4e25c582b160f504762cb77d661e866976606e8` (block 46,971,112, USDC
+    `Approval` of `1000000` to the vault) and deposit
+    `0x8f114b1d30d1373cfab3d0fd2ce35c78221d165b60bce0bf88dad0f784a24551` (block 46,971,145, type
+    `0x2`, nonce `6`, `deposit(1000000, 0x2ae7…E034)`, the vault's own `Deposit(sender = owner =
+    0x2ae7…E034, assets = 1000000, shares = 1e18)`), with the chain moving nonce `6 → 7`, account
+    USDC `18 → 17`, account shares `22 → 23`, allowance `0 → 1000000 → 0`, and the page re-read
+    after a reload showing `17 USDC / 23 shares / allowance 0` and no failure text;
+  - a rejection at a real prompt was neutral in the same session: after a person pressed Reject at
+    the approval prompt the page rendered its cancellation panel, with no transaction hash anywhere,
+    the account's nonce `6 → 6` and the allowance still `0` — the *code* was recorded on the switch
+    path above, not on this one, so what is measured here is the panel and the untouched state;
+  - the wallet not being on 84532 was met with the `Switch to chain 84532` control alone — no write
+    control was offered anywhere on the page while the switch had not happened.
+
+  So the connected branch has rendered live, **two of the four rows above** — a deposit really
+  happens, and a cancellation is neutral in a real wallet — have a measured interaction behind them
+  rather than only a unit test, and the wrong-chain row is measured in part. The table's "chain
+  31337" is the pre-Base-Sepolia wording; the measurement ran against chain **84532**. The
+  second-deposit row is untouched by that session.
+
+  Three things it does **not** settle, recorded as open questions rather than as mechanisms. The
+  approve was executed **on behalf of** the account through the EIP-7702 delegation path — its
+  receipt's `from` was `0xb01caea8c6c47bbf4f4b4c5080ca642043359c2e` and its `to` was
+  `0xdb9b1e94b5b69df7e401ddbede43491141047db3`, neither the connected account — while the deposit
+  was sent directly by the account: the relay is now named rather than unknown, but **why one write
+  took each route, and which route a given write will take, is not explained**. A real `4902` reached
+  the `chain-not-added` copy, while `src/lib/walletFailureCopy.ts`'s own comment records that
+  wagmi's `switchChain` discards the `4902` and offers `wallet_addEthereumChain`, so that the error
+  reaching `classifyWalletError` is the add's `4001`. **That comment and the measurement are now
+  reconciled, and the comment was the half that was wrong.** Read against the shipped
+  `@wagmi/core` 3.7.7 (`connectors/injected.js`), the add branch is entered only when
+  `error.code === 4902` or `error.data.originalError.code === 4902`, and **every** exit from it is
+  wrapped as `UserRejectedRequestError` (`4001`) — which `classifyWalletError` answers as `rejected`
+  before anything else. So the add branch was never entered, and the render came from either the
+  classifier's **wording** match or a `4902` at a depth the connector does not read; **which of the
+  two is not known**, and one instrumented run against a wallet without the chain would say. The
+  stub cannot: its error carries exactly the code the connector tests, so it always takes the branch
+  the real wallet skipped — which is why this is now a row in `TEST-DOUBLES.md` §3 where the double
+  is the thing that is wrong, and why `src/lib/walletFailureCopy.ts` records both readings instead of
+  the stub's alone. And the `4902` run's own wrinkle — the wallet sat on chain **10** (Optimism),
+  not the 8453 the manual step named, because a narrow `restrictNetworkSwitching` bundle requires the
+  first approval to name a chain the wallet is not already on — is corrected in `TEST-DOUBLES.md`
+  §2a rather than quietly satisfied.
 - **The console's half of the failure taxonomy is measured; the wallet half is not.**
   `FRONTEND-SPEC.md` §3 has all 11 classes with a verdict per row. RPC unreachable, API
   unreachable and stale data are implemented and measured against the running services —
