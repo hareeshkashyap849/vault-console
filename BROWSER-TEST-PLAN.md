@@ -677,19 +677,19 @@ the console column means "the console errors and uncaught exceptions this page p
 > F2) and **7 behind `--only E`**. The default run is what the counts below are about, because it is
 > the one that must stay green on a real browser.
 >
-> | Run — `tools/wallet-double-assert.mjs`, 40 assertions in the default run | Result |
+> | Run — `tools/wallet-double-assert.mjs`. The current default run is 40 assertions; the two old-code rows below were taken **before E moved behind `--only E`**, when the same run carried 7 more | Result |
 > |---|---|
-> | **the published page, before any fix** (the code a reader had) | **31 passed / 9 failed of 40.** The 21 assertions of scenarios A, B, C1 and C2 all pass — those are the fourth amendment's, unchanged — and all 9 failures are in the new scenarios: 3 in D, 1 in F1, 1 in F2, and 4 that only fire on a real browser against a real extension (see E below) |
-> | **a local export with ONLY the source fix stashed** (the fix's modules moved aside, everything else in place) | **35 passed / 5 failed of 40** — D's 3, F1's 1, F2's 1. **The 5 that prove the fix** |
-> | **a local export of the fixed sources** | **40 passed / 0 failed of 40**, exit 0; and with E opted in, **8 passed / 0 failed of 8**, exit 0 |
-> | **the PUBLISHED site after the second deploy** (`ba67b03`) | **40 passed / 0 failed of 40, 0 skipped, exit 0** |
+> | **the published page, before any fix** (the code a reader had) | **38 passed / 9 failed of 47.** The 21 assertions of scenarios A, B, C1 and C2 all pass — those are the fourth amendment's, unchanged — and all 9 failures are in the new scenarios: 3 in D, 4 in E, 1 in F1, 1 in F2 |
+> | **a local export with ONLY the source fix stashed** (the fix's modules moved aside, everything else in place) | **42 passed / 5 failed of 47** — D's 3, F1's 1, F2's 1. **The 5 that prove the fix.** (E passes here, and its 7 assertions have since moved behind `--only E`; the 5 failures are unaffected by that move, because they are in D, F1 and F2.) |
+> | **a local export of the fixed sources**, current assertion set | **40 passed / 0 failed of 40**, exit 0; and with E opted in, **8 passed / 0 failed of 8**, exit 0 |
+> | **the PUBLISHED site after the second deploy** (`ba67b03`) and again on `43d0891` | **40 passed / 0 failed of 40, 0 skipped, exit 0** |
 >
-> **And the tool of record, re-run on the head that carries this amendment (`0760191`, whose Pages run
-> `35298072426` succeeded):** `browser-assert.mjs` → **58 passed / 0 failed / 0 skipped, of 58
+> **And the tool of record, re-run on the head that carries this amendment (`43d0891`, whose Pages run
+> `35298836554` succeeded):** `browser-assert.mjs` → **58 passed / 0 failed / 0 skipped, of 58
 > assertions, exit 0** — the same 58 this file recorded before the change, so nothing else moved —
 > and `wallet-double-assert.mjs` → **40 passed / 0 failed of 40, exit 0** with scenario E printed as
 > SKIPPED.
-> Evidence: `verification/out/browser-assert-against-export-2026-09-19-0760191.txt`,
+> Evidence: `verification/out/browser-assert-against-export-2026-09-19-43d0891.txt`,
 > `verification/out/wallet-double-assert-LIVE-2026-09-19.txt`.
 >
 > **The 19 net new assertions, sorted by what they are worth** — because "40 assertions" is a poor
